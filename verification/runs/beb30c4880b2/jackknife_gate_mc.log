@@ -1,0 +1,70 @@
+seed base 5000, 200 stationary and 40 alternative replications per cell; polychoice 0.1.0 from C:/Users/bagoz/AppData/Local/pc_chain5/tmp/tmp.SD1sVwhsxB/lib/polychoice; build beb30c4880b2 
+T =  6 stationary: 200 reps, 5.1 s/rep | shipped gate: refused 0.025 (trend 0.010, refit failure 0.000, disagreement 0.015) | dist/noise quantiles 50/90/99: 0.93/1.81/2.71 
+        accepted reps: RMSE ML 0.300 0.206 0.261 0.280 | jackknife 0.239 0.195 0.222 0.211 ; Wald coverage ML 0.64 0.78 0.74 0.67 | jackknife 0.77 0.82 0.80 0.81 
+        signed bias (b:x1 b:x2 c:x1 c:x2), accepted reps (195): ML +0.237 -0.137 -0.192 +0.231 | jackknife -0.119 +0.094 +0.082 -0.089 ; all reps ML +0.235 -0.136 -0.188 +0.226 
+T = 10 stationary: 200 reps, 12.8 s/rep | shipped gate: refused 0.030 (trend 0.020, refit failure 0.000, disagreement 0.010) | dist/noise quantiles 50/90/99: 0.97/1.63/2.45 
+        accepted reps: RMSE ML 0.152 0.120 0.162 0.174 | jackknife 0.114 0.107 0.118 0.119 ; Wald coverage ML 0.76 0.87 0.76 0.74 | jackknife 0.88 0.94 0.93 0.89 
+        signed bias (b:x1 b:x2 c:x1 c:x2), accepted reps (194): ML +0.109 -0.071 -0.119 +0.132 | jackknife -0.061 +0.047 +0.031 -0.034 ; all reps ML +0.109 -0.072 -0.121 +0.132 
+T = 20 stationary: 200 reps, 34.0 s/rep | shipped gate: refused 0.010 (trend 0.000, refit failure 0.000, disagreement 0.010) | dist/noise quantiles 50/90/99: 0.88/1.59/2.27 
+        accepted reps: RMSE ML 0.082 0.071 0.083 0.087 | jackknife 0.062 0.059 0.063 0.067 ; Wald coverage ML 0.87 0.91 0.88 0.87 | jackknife 0.94 0.96 0.95 0.95 
+        signed bias (b:x1 b:x2 c:x1 c:x2), accepted reps (198): ML +0.052 -0.036 -0.048 +0.055 | jackknife -0.010 +0.004 +0.011 -0.010 ; all reps ML +0.052 -0.036 -0.048 +0.055 
+T =  6 regime    : 40 reps, 5.4 s/rep | shipped gate: refused 0.925 (trend 0.325, refit failure 0.000, disagreement 0.925) | dist/noise quantiles 50/90/99: 3.55/4.82/5.52 
+        accepted reps: RMSE ML 0.991 0.228 0.604 0.133 | jackknife 0.154 0.133 0.434 0.289 ; Wald coverage ML 0.00 0.67 0.00 1.00 | jackknife 1.00 1.00 0.00 0.67 
+        signed bias (b:x1 b:x2 c:x1 c:x2), accepted reps (3): ML +0.980 -0.196 +0.604 +0.122 | jackknife +0.147 -0.075 +0.429 -0.250 ; all reps ML +1.050 -0.166 +0.651 +0.174 
+T = 10 regime    : 40 reps, 13.0 s/rep | shipped gate: refused 1.000 (trend 0.550, refit failure 0.000, disagreement 1.000) | dist/noise quantiles 50/90/99: 5.52/7.47/8.62 
+        signed bias (b:x1 b:x2 c:x1 c:x2), accepted reps (0): ML NaN NaN NaN NaN | jackknife NaN NaN NaN NaN ; all reps ML +0.837 -0.089 +0.663 +0.077 
+T = 20 regime    : 40 reps, 33.4 s/rep | shipped gate: refused 1.000 (trend 0.875, refit failure 0.000, disagreement 1.000) | dist/noise quantiles 50/90/99: 8.63/11.13/11.80 
+        signed bias (b:x1 b:x2 c:x1 c:x2), accepted reps (0): ML NaN NaN NaN NaN | jackknife NaN NaN NaN NaN ; all reps ML +0.708 -0.048 +0.668 +0.008 
+T =  6 trend     : 40 reps, 5.0 s/rep | shipped gate: refused 0.525 (trend 0.525, refit failure 0.000, disagreement 0.000) | dist/noise quantiles 50/90/99: 0.96/1.52/2.00 
+        accepted reps: RMSE ML 0.255 0.124 0.321 0.330 | jackknife 0.235 0.166 0.264 0.289 ; Wald coverage ML 0.63 0.89 0.68 0.53 | jackknife 0.79 0.95 0.79 0.74 
+        signed bias (b:x1 b:x2 c:x1 c:x2), accepted reps (19): ML +0.207 -0.049 -0.248 +0.265 | jackknife -0.118 +0.117 +0.068 -0.115 ; all reps ML +0.197 -0.093 -0.201 +0.223 
+T = 10 trend     : 40 reps, 11.6 s/rep | shipped gate: refused 1.000 (trend 1.000, refit failure 0.000, disagreement 0.000) | dist/noise quantiles 50/90/99: 0.88/1.69/2.25 
+        signed bias (b:x1 b:x2 c:x1 c:x2), accepted reps (0): ML NaN NaN NaN NaN | jackknife NaN NaN NaN NaN ; all reps ML +0.087 -0.042 -0.127 +0.137 
+T = 20 trend     : 40 reps, 27.9 s/rep | shipped gate: refused 1.000 (trend 1.000, refit failure 0.000, disagreement 0.000) | dist/noise quantiles 50/90/99: 0.94/1.72/2.06 
+        signed bias (b:x1 b:x2 c:x1 c:x2), accepted reps (0): ML NaN NaN NaN NaN | jackknife NaN NaN NaN NaN ; all reps ML -0.083 +0.072 -0.041 +0.040 
+--- refusal rates by (alpha, kappa): rows T x dgp --- 
+alpha 0.010 kappa 1.25: 6.regime=1.000  10.regime=1.000  20.regime=1.000  6.stationary=0.285  10.stationary=0.285  20.stationary=0.210  6.trend=0.650  10.trend=1.000  20.trend=1.000 
+alpha 0.010 kappa 1.50: 6.regime=1.000  10.regime=1.000  20.regime=1.000  6.stationary=0.200  10.stationary=0.135  20.stationary=0.130  6.trend=0.600  10.trend=1.000  20.trend=1.000 
+alpha 0.010 kappa 1.75: 6.regime=1.000  10.regime=1.000  20.regime=1.000  6.stationary=0.120  10.stationary=0.090  20.stationary=0.055  6.trend=0.525  10.trend=1.000  20.trend=1.000 
+alpha 0.010 kappa 2.00: 6.regime=1.000  10.regime=1.000  20.regime=1.000  6.stationary=0.085  10.stationary=0.055  20.stationary=0.040  6.trend=0.525  10.trend=1.000  20.trend=1.000 
+alpha 0.010 kappa 2.50: 6.regime=0.925  10.regime=1.000  20.regime=1.000  6.stationary=0.025  10.stationary=0.030  20.stationary=0.010  6.trend=0.525  10.trend=1.000  20.trend=1.000 
+alpha 0.010 kappa 3.00: 6.regime=0.825  10.regime=1.000  20.regime=1.000  6.stationary=0.015  10.stationary=0.030  20.stationary=0.000  6.trend=0.525  10.trend=1.000  20.trend=1.000 
+alpha 0.010 kappa 3.50: 6.regime=0.675  10.regime=1.000  20.regime=1.000  6.stationary=0.010  10.stationary=0.020  20.stationary=0.000  6.trend=0.525  10.trend=1.000  20.trend=1.000 
+alpha 0.010 kappa 4.00: 6.regime=0.500  10.regime=0.975  20.regime=1.000  6.stationary=0.010  10.stationary=0.020  20.stationary=0.000  6.trend=0.525  10.trend=1.000  20.trend=1.000 
+alpha 0.001 kappa 1.25: 6.regime=1.000  10.regime=1.000  20.regime=1.000  6.stationary=0.285  10.stationary=0.275  20.stationary=0.210  6.trend=0.625  10.trend=1.000  20.trend=1.000 
+alpha 0.001 kappa 1.50: 6.regime=1.000  10.regime=1.000  20.regime=1.000  6.stationary=0.200  10.stationary=0.120  20.stationary=0.130  6.trend=0.550  10.trend=1.000  20.trend=1.000 
+alpha 0.001 kappa 1.75: 6.regime=1.000  10.regime=1.000  20.regime=1.000  6.stationary=0.120  10.stationary=0.070  20.stationary=0.055  6.trend=0.475  10.trend=1.000  20.trend=1.000 
+alpha 0.001 kappa 2.00: 6.regime=1.000  10.regime=1.000  20.regime=1.000  6.stationary=0.085  10.stationary=0.035  20.stationary=0.040  6.trend=0.475  10.trend=1.000  20.trend=1.000 
+alpha 0.001 kappa 2.50: 6.regime=0.925  10.regime=1.000  20.regime=1.000  6.stationary=0.020  10.stationary=0.010  20.stationary=0.010  6.trend=0.475  10.trend=1.000  20.trend=1.000 
+alpha 0.001 kappa 3.00: 6.regime=0.800  10.regime=1.000  20.regime=1.000  6.stationary=0.010  10.stationary=0.010  20.stationary=0.000  6.trend=0.475  10.trend=1.000  20.trend=1.000 
+alpha 0.001 kappa 3.50: 6.regime=0.575  10.regime=1.000  20.regime=1.000  6.stationary=0.005  10.stationary=0.000  20.stationary=0.000  6.trend=0.475  10.trend=1.000  20.trend=1.000 
+alpha 0.001 kappa 4.00: 6.regime=0.375  10.regime=0.925  20.regime=1.000  6.stationary=0.005  10.stationary=0.000  20.stationary=0.000  6.trend=0.475  10.trend=1.000  20.trend=1.000 
+selection rule (alpha 0.01, stationary refusal <= 0.05 at every T): smallest kappa 2.5; shipped kappa 2.5: stationary refusal T=6 0.025, T=10 0.030, T=20 0.010 
+done; statistics in verification/jackknife_gate_mc.rds 
+JK_REPS_NULL 200, JK_REPS_ALT 40, polychoice 0.1.0 from C:/Users/bagoz/AppData/Local/pc_chain5/tmp/tmp.SD1sVwhsxB/lib/polychoice 
+R version 4.6.1 (2026-06-24 ucrt)
+Platform: x86_64-w64-mingw32/x64
+Running under: Windows 11 x64 (build 26300)
+
+Matrix products: default
+  LAPACK version 3.12.1
+
+locale:
+[1] LC_COLLATE=English_United States.utf8 
+[2] LC_CTYPE=English_United States.utf8   
+[3] LC_MONETARY=English_United States.utf8
+[4] LC_NUMERIC=C                          
+[5] LC_TIME=English_United States.utf8    
+
+time zone: America/New_York
+tzcode source: internal
+
+attached base packages:
+[1] stats     graphics  grDevices utils     datasets  methods   base     
+
+other attached packages:
+[1] polychoice_0.1.0
+
+loaded via a namespace (and not attached):
+[1] httr_1.4.8     compiler_4.6.1 R6_2.6.1       tools_4.6.1    Rcpp_1.1.2    
+[6] texreg_1.39.5  Formula_1.2-6 

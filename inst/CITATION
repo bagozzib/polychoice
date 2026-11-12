@@ -1,0 +1,23 @@
+citHeader("To cite polychoice in publications use:")
+
+bibentry(
+  bibtype  = "Manual",
+  title    = "polychoice: Multinomial Choice, Inflated Multinomial Logit, and Tests of IIA",
+  author   = person("Benjamin E.", "Bagozzi"),
+  year     = "2026",
+  note     = paste("R package version", meta$Version),
+  url      = "https://github.com/bagozzib/polychoice"
+)
+
+bibentry(
+  bibtype  = "Article",
+  title    = "Distinguishing occasional abstention from routine indifference in models of vote choice",
+  author   = c(person("Benjamin E.", "Bagozzi"), person("Kathleen", "Marchetti")),
+  journal  = "Political Science Research and Methods",
+  year     = "2017",
+  volume   = "5",
+  number   = "2",
+  pages    = "277--294",
+  doi      = "10.1017/psrm.2015.42",
+  header   = "The baseline-inflated multinomial logit:"
+)

@@ -1,0 +1,53 @@
+build beb30c4880b2  git 8a8de05436558722adde57ac35e559388089faa2  uncommitted changes: no  started 2026-11-10 17:03:04  R_LIBS=C:/Users/bagoz/AppData/Local/pc_chain5/tmp/tmp.SD1sVwhsxB/lib  pandoc 3.6.3
+  tests test-captive.R exit 0
+  tests test-derivatives.R exit 0
+  tests test-design.R exit 0
+  tests test-examples.R exit 0
+  tests test-families.R exit 0
+  tests test-firth.R exit 0
+  tests test-iia.R exit 0
+  tests test-localreview.R exit 0
+  tests test-methods.R exit 0
+  tests test-mnp.R exit 0
+  tests test-oracles.R exit 0
+  tests test-panel.R exit 0
+  tests test-paths.R exit 0
+  tests test-phase4d.R exit 0
+  tests test-phase4e.R exit 0
+  tests test-prior.R exit 0
+  tests test-published.R exit 0
+  tests test-re.R exit 0
+  tests test-review.R exit 0
+  tests test-review2.R exit 0
+  tests test-review3.R exit 0
+  tests test-review4.R exit 0
+  tests test-rologit.R exit 0
+  tests test-search.R exit 0
+  tests test-separation.R exit 0
+  tests test-spec.R exit 0
+  tests test-stress.R exit 0
+  tests test-suprema.R exit 0
+  tests: 1343 expectations, 0 failed, 0 warnings, 0 errors, 0 skipped
+  precomputed vignettes current
+  R CMD build exit 0
+  R CMD check exit 0
+  remnl_adaptive_check.R exit 0  2026-11-10 17:33:00 -> 2026-11-10 17:35:56
+  table2_check.R exit 0  2026-11-10 17:35:56 -> 2026-11-10 17:36:36
+  size_check_iia.R exit 0  2026-11-10 17:36:36 -> 2026-11-10 17:39:00
+  q1_covariance_check.R exit 0  2026-11-10 17:39:00 -> 2026-11-10 17:39:51
+  jackknife_gate_mc.R exit 0  2026-11-10 17:39:51 -> 2026-11-10 21:37:16
+build beb30c4880b2  git 8a8de05436558722adde57ac35e559388089faa2  uncommitted changes: no  started 2026-11-11 05:28:00  R_LIBS=C:/Users/bagoz/AppData/Local/pc_chain5/tmp/tmp.mWt8YgcX60/lib  pandoc 3.6.3
+  jackknife_gate_holdout.R exit 0  2026-11-11 05:28:00 -> 2026-11-11 09:13:03
+  vuong_size_mc.R exit 0  2026-11-11 09:13:03 -> 2026-11-11 09:35:51
+  recovery_coverage_mc.R exit 0  2026-11-11 09:35:51 -> 2026-11-11 10:21:42
+  mnprobit_recovery_mc.R exit 0  2026-11-11 10:21:42 -> 2026-11-11 10:33:15
+  boot_lr_size_mc.R exit 0  2026-11-11 10:33:15 -> 2026-11-11 14:01:10
+  rologit_mc.R exit 0  2026-11-11 14:01:11 -> 2026-11-11 14:04:58
+  captive_mc.R exit 0  2026-11-11 14:04:58 -> 2026-11-11 16:23:09
+  rologit_boot_size_mc.R exit 0  2026-11-11 16:23:09 -> 2026-11-11 17:00:12
+  finished 2026-11-11 17:00:12
+build beb30c4880b2  git 8a8de05436558722adde57ac35e559388089faa2  uncommitted changes: no  started 2026-11-11 18:01:03  R_LIBS=C:/Users/bagoz/AppData/Local/pc_chain5/tmp/tmp.fQbC5BW9ze/lib  pandoc 3.6.3
+  captivity_test_mc.R exit 0  2026-11-11 18:01:03 -> 2026-11-11 22:29:32
+  captivity_lr_pa2006_boot.R exit 0  2026-11-11 22:29:32 -> 2026-11-11 22:42:25
+  firth_mc.R exit 0  2026-11-11 22:42:25 -> 2026-11-11 23:21:21
+  finished 2026-11-11 23:21:21

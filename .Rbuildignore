@@ -1,0 +1,17 @@
+^\.gitignore$
+^\.github$
+^_pkgdown\.yml$
+^docs$
+^pkgdown$
+^cran-comments\.md$
+^data-raw$
+^verification$
+^DESIGN\.md$
+^.*\.Rproj$
+^\.Rproj\.user$
+^src/.*\.o$
+^src/.*\.dll$
+^src/.*\.so$
+^\.gitattributes$
+^vignettes/.*\.Rmd\.orig$
+^vignettes/precompute\.R$

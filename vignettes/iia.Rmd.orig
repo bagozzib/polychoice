@@ -1,0 +1,304 @@
+---
+title: "Testing IIA and specification"
+author: "Benjamin E. Bagozzi"
+output:
+  rmarkdown::html_vignette:
+    toc: true
+vignette: >
+  %\VignetteIndexEntry{Testing IIA and specification}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>", fig.width = 6, fig.height = 4,
+                      message = FALSE)
+```
+
+The multinomial logit's independence of irrelevant alternatives (IIA) is a
+testable restriction, and the tests of it have a troubled history: the most
+cited one, in its classic form, often yields a covariance difference that is
+not positive semidefinite and a negative statistic, and implementations of the
+others differ in details that change the answer (which half of the sample is
+used, which weights, which covariance). `polychoice` implements the existing tests with
+their definitions fixed in the package's design document, checks them by
+simulation, and reports what the simulation found. This vignette walks through
+the battery on the Pennsylvania vote data and then through the further
+specification tests.
+
+```{r data}
+library(polychoice)
+data(pa2006)
+m <- mnl(vote ~ canvass + phone + democrat + republican + age + female + voted2004,
+         data = pa2006)
+```
+
+## The IIA battery
+
+### Hausman and McFadden (1984)
+
+Under IIA, dropping an alternative and refitting on the remaining cases leaves
+the common coefficients consistent, so the full-sample and restricted
+estimates should agree. The classic statistic uses the *difference* of the two
+covariance matrices,
+\(q = (\hat\beta_r - \hat\beta_f)'(V_r - V_f)^{-1}(\hat\beta_r - \hat\beta_f)\),
+which need not be positive semidefinite in finite samples; a negative
+statistic is reported with a p-value of 1 and a flag. The *joint* form
+estimates the covariance of \(\hat\beta_r - \hat\beta_f\) from the stacked
+scores of the two fits (a seemingly-unrelated-estimation sandwich), which is
+always positive semidefinite. Dropping the base alternative re-bases the model
+exactly, so every alternative can be dropped.
+
+```{r hm}
+hausman_mcfadden(m)
+hausman_mcfadden(m, vcov = "joint")
+```
+
+### Small and Hsiao (1985)
+
+The sample is split in half. The full model is fit on both halves and the
+two estimates are combined with the weights \(\sqrt{1/2}\) and
+\(1 - \sqrt{1/2}\); the model without the dropped alternative is fit on the
+second half; the statistic is minus twice the difference between the
+second-half restricted log-likelihood evaluated at the combined estimates and
+at its own maximum. It depends on the split, so `splits` repeats it over
+several random splits and `seed` makes the result reproducible.
+
+```{r sh}
+small_hsiao(m, splits = 10, seed = 1)
+```
+
+The split matters, and on these data for a reason that has nothing to do
+with IIA. Only two of the 125 nonresponders did not vote in 2004. In four of
+the ten splits (1, 4, 5, and 10) both fall in the second half, so in the
+first half the nonresponse equation separates on `voted2004` (its coefficient
+diverges); the combined estimate then gives those two respondents a
+near-zero probability in the second half, and the statistics of the three
+drops that keep nonresponse exceed 50 on 16 degrees of freedom, while the
+nonresponse drop, which removes that equation, stays below 26. The
+`separated` column marks every row whose statistic uses a diverging
+half-sample fit: the three drops that keep nonresponse in those four splits
+and in split 6 (where both fall in the first half; there the separated half
+carries the smaller weight and the evaluation half has neither case, so those
+statistics are small), but not the nonresponse drops, which remove the
+separated equation. In the five splits without separation only two of the
+20 statistics reject at the 5 percent level, both in split 2. A single split
+can therefore suggest a decisive rejection or none, and which one is luck: on
+these data a split drawn with `small_hsiao(m, seed = s)` is separated for 12
+of the seeds 1 to 20. The test is the split fixed before the data are seen
+(`small_hsiao(m, seed = )`): report it, and when it is separated, as split 1
+is here, report it as uninformative or calibrate it by the parametric
+bootstrap with the same seed. A seed chosen after seeing a result is not a
+test. The splits and their summary (the median, the share of splits
+rejecting, and the share separated) describe how much the statistic varies;
+when many splits separate, the test has little to say about IIA on data like
+these. The summary's `median_p` is the chi-square p-value of the median
+statistic, a descriptive figure: the median of several split statistics is not
+itself chi-square distributed (in the package's size study a single split
+had nominal size, while the battery's median rule never rejected under the
+null: it is conservative by construction). When the
+decision matters, calibrate the median by the parametric bootstrap: give
+`boot_pvalue()` a function that returns the median statistic as a one-row
+data frame, with a fixed seed so that every replicate draws its splits from
+the same random stream (they are stratified on each replicate's simulated
+outcome; slow: ten splits refit the model thirty times per replicate, so this
+is not run here).
+
+```{r sh-boot, eval = FALSE}
+sh_median <- function(object, drop) {
+  s <- attr(small_hsiao(object, drop = drop, splits = 10, seed = 1), "summary")
+  data.frame(test = "Small-Hsiao median", statistic = s$median_statistic)
+}
+boot_pvalue(m, sh_median, B = 99, drop = "abstain")
+```
+
+### Fok and Paap (2025)
+
+Fok and Paap (2025) take the pairwise conditional likelihoods of the
+multinomial logit and build two tests: \(Q_1\), a Hausman contrast between the
+maximum-likelihood and the composite-likelihood estimates (the latter with a
+Godambe sandwich covariance), and \(Q_2\), a GMM overidentification test on the
+stacked pairwise scores. \(Q_2\) is computed in the two-step form by default
+(`gmm = "iterated"` and the projected C-statistic form are available); with
+the pairs that involve the base alternative only and case-specific covariates
+alone there is no overidentification and only \(Q_1\) is reported. Under
+the multinomial logit the composite-likelihood estimator is nearly as
+efficient as the maximum-likelihood one, so the difference of their two
+separately estimated covariance matrices, which Fok and Paap's \(Q_1\) uses,
+is a small difference of noisy matrices and is indefinite in nearly every
+sample (the package's simulations found 44 percent of these statistics
+negative). `fp_tests()` therefore estimates the covariance of the contrast
+directly from the two estimators' stacked influence functions by default,
+as the joint Hausman-McFadden form does; `vcov = "difference"` gives Fok and
+Paap's formula.
+
+```{r fp}
+fp_tests(m)
+```
+
+### The battery
+
+`iia_tests()` runs all of the above with one call, with ten Small-Hsiao splits
+reported by their median (the row's p-value is the chi-square p-value of the
+median statistic, a descriptive figure).
+
+```{r battery}
+iia_tests(m, seed = 1)
+```
+
+How to read this table for these data: the joint Hausman-McFadden rows do
+not reject at the 5 percent level (the abstention row only narrowly), and
+both Fok-Paap tests do. The Small-Hsiao medians are descriptive (the note
+under the table), and in three of their rows half the splits are separated. The
+difference-form Hausman-McFadden rows rest on covariance differences that are
+not positive semidefinite (`psd = FALSE`); one rule covers every such row: a
+negative statistic is no evidence against IIA (its p-value is 1), and a
+positive one is unreliable, because the difference form over-rejects (next
+section), so those rows are descriptive. The tests look at different
+departures, so disagreement is informative rather than contradictory: the
+Fok-Paap tests use all pairwise comparisons at once, while the drop tests
+look at one alternative at a time (and the Small-Hsiao medians here rest
+partly on separated splits). A reasonable report states the
+battery, notes which rows had an indefinite covariance difference, and, when
+the decision matters, calibrates the decisive statistic by the parametric
+bootstrap (next section) or fits the alternative model directly (nested logit,
+HEV, random intercepts; the *Beyond IIA* vignette) and compares by likelihood
+ratio.
+
+### What the size study found
+
+The package's verification ledger records a 300-replication study of the
+battery on data generated from the multinomial logit (three alternatives,
+four covariates, ten parameters, 1000 cases; Monte Carlo standard error about
+0.013), with these rejection rates at the nominal 5 percent level: the
+Hausman-McFadden difference form was not positive semidefinite in 79 percent
+of replications and rejected 8 percent of the time for a non-base drop and 16
+percent for the base drop; its joint form 2 and 5 percent; Small-Hsiao (one
+split) 4 and 5 percent, while the battery's median over ten splits never
+rejected; \(Q_1\) in its joint form 6 percent; \(Q_2\) 6 percent. Fok and
+Paap's variance-difference form of \(Q_1\) rejected 4 percent of the time, but
+a separate 1,000-replication check of the same design showed that apparent
+calibration to be accidental: its covariance difference was never positive semidefinite, 44
+percent of its statistics were negative, and it rejected 3.3, 4.2, and 4.9
+percent of the time at the 1, 5, and 10 percent levels, while the joint form
+that `fp_tests()` uses by default rejected 1.5, 6.2, and 11.2 percent. An
+indefinite covariance difference can give a statistic of either sign: every
+form refers \(\max(\text{statistic}, 0)\) to the chi-square, so a negative
+statistic has a p-value of 1. The practical recommendations that follow are:
+
+* read the difference form of Hausman-McFadden as descriptive and rely on its
+  joint form, a single Small-Hsiao split with its seed fixed in advance
+  (`small_hsiao(m, seed = )`; the median over several splits, which
+  `iia_tests()` reports, is descriptive: in the size study it rejected in none
+  of 300 samples), \(Q_1\) in its joint form, and \(Q_2\);
+* calibrate any of them with the parametric bootstrap when the decision matters
+  (below);
+* remember that these are tests of IIA against unspecified alternatives; the
+  score test against a nested logit (below) and the likelihood-ratio tests
+  against the fitted nested logit, HEV, or random-intercept model (vignette
+  *Beyond IIA*) are the sharper instruments when the alternative is known.
+
+## Parametric bootstrap calibration
+
+`boot_pvalue()` takes a test function whose null hypothesis is the fitted
+model (the IIA tests, `nested_lm_test()`, `captivity_test()`) and returns a
+data frame with a `statistic` column, with its arguments, simulates `B` data
+sets from the fitted model, refits, recomputes the statistic, and reports the bootstrap p-value
+\((1 + k) / (B' + 1)\), with \(B'\) the replicates that succeeded and \(k\) the
+number of their statistics at least as large as the observed one, next to the
+asymptotic p-value. Replicates whose
+refit fails or loses an alternative are dropped and counted (`n_failed`);
+replicates whose refit raises a warning (diverging coefficients, a boundary, an
+ill-conditioned information matrix) are kept and counted (`n_flagged`, with the
+warnings tabulated in the attribute `flag_reasons`); the method line reports
+each count that is not zero. It is the remedy for a test whose
+finite-sample distribution is in doubt. Here it calibrates the two Fok-Paap
+tests, the rows of the battery that reject:
+
+```{r boot}
+set.seed(2)
+bf <- boot_pvalue(m, fp_tests, B = 49)
+bf
+attr(bf, "flag_reasons")
+attr(bf, "p.boot_unflagged")
+```
+
+Calibrated, \(Q_2\) still rejects: none of the 49 replicate statistics
+reaches the observed one, so `p.boot` is 0.02, the smallest value 49
+replicates can give. For \(Q_1\) the overall `p.boot` of 0.26 hides where the
+exceedances come from. The ten flagged replicates are simulated samples in
+which the nonresponse equation separates on `voted2004`, the same mechanism as
+in the Small-Hsiao splits above, and every one of them exceeds the observed
+\(Q_1\), while only two of the 39 unflagged replicates do. The observed data
+do not separate. Over the unflagged replicates \(Q_1\)'s bootstrap p-value is
+0.075 and \(Q_2\)'s 0.025, but that is a p-value conditional on samples that do
+not separate, whose size has not been studied; `p.boot` remains the
+calibrated one. On these data \(Q_2\) is the decisive Fok-Paap test.
+\(Q_1\)'s calibrated p-value is 0.26; leaving out the separated replicates
+gives 0.075, a figure whose size has not been studied.
+
+## The score test against a nested logit
+
+McFadden's (1987) Lagrange-multiplier test asks whether the inclusive-value
+parameters of a specified nest structure differ from 1 (the multinomial logit)
+without fitting the nested model; `nested_lm_test()` computes it from the
+multinomial-logit scores (the outer-product information by default, the form
+of McFadden's regression test). Here the nests group the two forms of
+non-participation against the two forms of voting.
+
+```{r nlm}
+nests <- list(out = c("abstain", "nonresponse"), vote = c("democrat", "republican_other"))
+nested_lm_test(m, nests)
+```
+
+## Further specification tests
+
+`combine_test()` asks whether two alternatives can be pooled (Cramer and
+Ridder 1991): the Wald form tests the equality of their slope coefficients
+(the constants stay free), the likelihood-ratio form compares the pooled fit
+with a binomial split term.
+`term_test()` tests every covariate jointly across equations (Wald or LR).
+`hl_test()` is the Hosmer-Lemeshow-type goodness-of-fit test for multinomial
+models of Fagerland, Hosmer, and Bofin (2008), with the observed and expected
+counts by decile of risk.
+
+```{r spec}
+combine_test(m, c("democrat", "republican_other"))
+term_test(m)
+hl_test(m)
+```
+
+On these data the Hosmer-Lemeshow-type test rejects clearly: the fitted
+probabilities of the multinomial logit are miscalibrated in some deciles of
+risk, a sign of misspecification that the IIA tests above do not locate.
+
+The IIA tests, the score test, `combine_test()`, and `term_test()` return data
+frames of class `"iia_test"` with a `statistic` column, so their results can be
+bound and filtered. `boot_pvalue()` calibrates those whose null is the fitted
+model; `term_test()` and `combine_test()` test a restriction of it and are
+refused (for a term, fit the model without it and use `boot_lr_test()`).
+`hl_test()` returns a list
+with the observed and expected tables, and `iia_tests()` a data frame of class
+`"iia_battery"`.
+
+## References
+
+Cramer, J.S. and Ridder, G. (1991). Pooling states in the multinomial logit
+model. *Journal of Econometrics*, 47, 267-272.
+
+Fagerland, M.W., Hosmer, D.W. and Bofin, A.M. (2008). Multinomial
+goodness-of-fit tests for logistic regression models. *Statistics in
+Medicine*, 27, 4238-4253.
+
+Fok, D. and Paap, R. (2025). New misspecification tests for multinomial logit
+models. *Journal of Choice Modelling*, 54, 100531.
+doi:10.1016/j.jocm.2024.100531.
+
+Hausman, J.A. and McFadden, D. (1984). Specification tests for the multinomial
+logit model. *Econometrica*, 52, 1219-1240.
+
+McFadden, D. (1987). Regression-based specification tests for the multinomial
+logit model. *Journal of Econometrics*, 34, 63-82.
+
+Small, K.A. and Hsiao, C. (1985). Multinomial logit specification tests.
+*International Economic Review*, 26, 619-627.

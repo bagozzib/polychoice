@@ -1,0 +1,293 @@
+---
+title: "Getting started with polychoice"
+author: "Benjamin E. Bagozzi"
+output:
+  rmarkdown::html_vignette:
+    toc: true
+vignette: >
+  %\VignetteIndexEntry{Getting started with polychoice}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>", fig.width = 6, fig.height = 4,
+                      message = FALSE)
+has_aer <- requireNamespace("AER", quietly = TRUE)
+```
+
+## The problem
+
+Many outcomes in the social sciences are unordered choices among several
+alternatives: a vote for one of several candidates or for none, a travel mode,
+a type of political action, a treaty design. The workhorse model is the
+multinomial logit (Theil 1969; McFadden 1974), which comes in two notations
+that `polychoice` treats as one model:
+
+* the **multinomial logit** of the wide layout, one row per case, with
+  case-specific covariates whose coefficients differ by alternative
+  (`y ~ x1 + x2`);
+* the **conditional logit** of the long layout, one row per case and
+  alternative, with alternative-specific covariates whose coefficients are
+  common to all alternatives (`chosen ~ w | x`, with `id` and `alt`).
+
+Both are the same choice probability
+
+\[
+P(y_i = j) = \frac{a_{ij} \exp(V_{ij})}{\sum_k a_{ik} \exp(V_{ik})}, \qquad
+V_{ij} = o_{ij} + x_i'\beta_j + w_{ij}'\gamma,
+\]
+
+with \(a_{ij}\) indicating whether alternative \(j\) is available to case
+\(i\), \(\beta_b = 0\) for the base alternative, and an offset \(o_{ij}\).
+
+The model's convenience comes with the independence of irrelevant alternatives
+(IIA): the odds between any two alternatives do not depend on the others.
+`polychoice` provides the estimators that relax IIA (nested logit,
+heteroskedastic extreme value, multinomial probit, random intercepts), the
+baseline-inflated multinomial logit of Bagozzi and Marchetti (2017) for a base
+alternative that mixes two kinds of cases, and the full battery of tests of IIA
+and of specification, all behind one interface. This vignette covers the
+interface; the companion vignettes cover the inflated model, the tests, and
+the models beyond IIA.
+
+## One interface, seven estimators
+
+| Function      | Model                                                          |
+|---------------|----------------------------------------------------------------|
+| `mnl()`       | multinomial / conditional logit                                |
+| `imnl()`      | inflated multinomial logit (one or several inflated alternatives) |
+| `nlogit()`    | two-level nested logit                                         |
+| `hev()`       | heteroskedastic extreme value                                  |
+| `mnprobit()`  | multinomial probit with a free covariance                      |
+| `remnl()`     | multinomial logit with random alternative-specific intercepts  |
+| `rologit()`   | rank-ordered (exploded) logit for rankings                     |
+
+Every estimator takes the same arguments for the data layout (`id`, `alt`),
+the base alternative (`ref`), frequency `weights`, an `offset`, unit fixed
+effects (`fe`; not `imnl()`, whose split equation they leave identified only
+through the functional form, nor `remnl()`, whose unit effects are the random
+intercepts, nor `rologit()`),
+and standard errors (`se`: inverse observed information,
+outer product of the scores, robust, cluster-robust, or bootstrap), and
+returns an object of class `"choicemodel"` with the usual methods (`summary`,
+`coef`, `vcov`, `predict`, `confint`, `logLik`, `update`, `simulate`) plus
+`broom` tidiers and `texreg` / `modelsummary` support.
+
+## A first fit: the 2006 Pennsylvania state House vote
+
+`pa2006` holds the survey of Arceneaux and Kolodny (2009) after a field
+experiment in which an interest group endorsed the Democratic candidate by
+canvassing or by telephone. The outcome has four alternatives, with abstention
+as the base.
+
+```{r pa2006}
+library(polychoice)
+data(pa2006)
+table(pa2006$vote)
+m <- mnl(vote ~ canvass + phone + democrat + republican + age + female + voted2004,
+         data = pa2006)
+summary(m)
+```
+
+The coefficient names are `alternative:term`: each non-base alternative has
+its own equation against abstention. `rrr()` reports relative risk ratios
+(exponentiated coefficients) with confidence intervals; `summary()` also
+shows the information criteria and the standard-error type.
+
+```{r rrr}
+head(rrr(m), 6)
+```
+
+### Predicted probabilities and first differences
+
+`predict()` returns the probability of every alternative for the estimation
+rows or for `newdata`; `type = "class"` picks the most likely alternative.
+
+```{r predict}
+head(predict(m), 3)
+nd <- data.frame(canvass = c(0, 1), phone = 0, democrat = 1, republican = 0, age = 45,
+                 female = 1, voted2004 = 1)
+predict(m, newdata = nd)
+```
+
+`first_difference()` is the quantity of interest most analyses report: the
+change in every alternative's probability when one covariate moves between two
+values. By default in the wide layout the other covariates are held at a
+profile of their weighted means and modes; `newdata` gives another one-case
+profile; `average = TRUE` (the default in the long layout) averages the first
+difference over the estimation cases, the average effect many applied
+reports prefer to the effect at a profile.
+The columns `from` and `to` are the two predicted probabilities. Delta-method
+intervals are the default; `ci = "sim"` draws from the asymptotic normal
+distribution of the estimates instead.
+
+```{r fd}
+first_difference(m, "canvass", from = 0, to = 1)
+first_difference(m, "canvass", from = 0, to = 1, average = TRUE)
+```
+
+### Fit and classification
+
+`fit_stats()` gives the log-likelihood, information criteria, and the
+pseudo-\(R^2\) measures in common use (all relative to the null model with
+alternative-specific constants only); `classification()` cross-tabulates the
+observed and predicted alternatives.
+
+```{r fit}
+fit_stats(m)
+classification(m)
+```
+
+## The long layout: alternative-specific covariates
+
+When covariates vary across alternatives (travel time, price, distance to a
+polling place), the data come as one row per case and alternative and the
+formula has two parts: `chosen ~ w | x`, where `w` are the alternative-specific
+covariates with a common coefficient and `x` the case-specific ones with
+alternative-specific coefficients. The intercept of the first part switches
+the alternative-specific constants on (the default); `chosen ~ 0 + w | x`
+switches them off. The classic example is the Australian travel mode data
+distributed with the `AER` package.
+
+```{r long, eval = requireNamespace("AER", quietly = TRUE)}
+data("TravelMode", package = "AER")
+TM <- TravelMode
+TM$chosen <- as.integer(TM$choice == "yes")
+head(TM, 4)
+mc <- mnl(chosen ~ wait + vcost + travel + gcost | income + size, data = TM,
+          id = "individual", alt = "mode")
+summary(mc)
+```
+
+A covariate in the first part can be given an alternative-specific
+coefficient with `w:alt` (for example `vcost:mode`, a cost coefficient per mode), so no third formula part is
+needed. Alternatives absent from a case's rows are treated as unavailable
+to that case. This is also how a stated consideration set enters: when a
+survey asks which parties a respondent would consider voting for, keeping
+only those parties' rows makes `mnl()` the model of the choice within the
+considered set (which parties are considered is then a separate set of binary
+models; Oscarsson and Rosema 2019 recommend such direct measures). A
+consideration set inferred from the choices alone, without such a question,
+is weakly identified in the designs political scientists have: the package's
+verification found the standard errors of the consideration parameters as
+large as the parameters at 2,000 cases with respondent characteristics alone,
+recovery failing when the same voter-party distances drive both stages, and,
+even with a distance that shapes consideration only, intervals that covered
+0.88-0.91 instead of 0.95 in a realistic design. The package does not fit it.
+
+## Rankings
+
+When respondents rank the alternatives instead of choosing one (a survey that
+asks voters to order the parties, the ballots of a ranked-choice election),
+`rologit()` fits the rank-ordered logit (Beggs, Cardell and Hausman 1981),
+also called the exploded logit after Chapman and Staelin's (1982) "explosion"
+of a ranking into independent choices. A ranking is read as a sequence of
+multinomial-logit choices: the first-ranked alternative from the whole choice
+set, the second from those left, and so on. Partial rankings (only the first
+few positions) and tied ranks are handled exactly (Allison and Christakis
+1994). The data are in the long
+layout with the rank as the response, smaller preferred and 0 for an
+alternative left unranked; `rrologit()` simulates such data.
+
+```{r rologit}
+set.seed(8)
+dk <- rrologit(800, beta = cbind(b = c(0.5, -1, 0.8), c = c(-0.3, 0.6, -0.5), d = c(0.2, 0.4, 0.3)),
+               gamma = 0.7, depth = 3)
+head(dk, 4)
+mro <- rologit(rank ~ w1 | x1 + x2, data = dk, id = "id", alt = "alt")
+mfc <- rologit(rank ~ w1 | x1 + x2, data = dk, id = "id", alt = "alt", depth = 1)   # first choices only
+cbind(rankings = sqrt(diag(vcov(mro))), first_choices = sqrt(diag(vcov(mfc))))[c(1:3, 10), ]
+```
+
+The rankings estimate the same coefficients as the first choices with
+smaller standard errors. The model assumes that preferences are the same at
+every stage of the ranking; `rank_test()` refits with separate coefficients
+for the stages after the first and tests the difference (Hausman and Ruud
+1987, section 3; Allison and Christakis 1994, section 5.4):
+
+```{r rank-test}
+rank_test(mro, after = 1)
+```
+
+## Standard errors, weights, and panels
+
+`se = "robust"` gives the sandwich over cases; `cluster = "<cluster column>"` the
+cluster-robust version (and selects `se = "cluster"`); `se = "bootstrap"`
+resamples cases, or clusters when `cluster` is given (units with unit fixed
+effects or random intercepts), with `nboot` refits.
+`weights` are frequency weights: a case with weight 2 counts as two
+identical cases in the estimates, the model-based standard errors, the
+information criteria, and the averaged quantities of interest. Survey
+(probability) weights are not supported: `se = "robust"` is the
+frequency-weight sandwich, not a design-based variance (see `?mnl`).
+
+```{r robust}
+mr <- mnl(vote ~ canvass + phone + democrat + republican + age + female + voted2004,
+          data = pa2006, se = "robust")
+cbind(analytic = sqrt(diag(vcov(m)))[1:4], robust = sqrt(diag(vcov(mr)))[1:4])
+```
+
+For panels, `fe = "<unit column>"` (the name of the column that identifies
+the units) adds alternative-specific constants per unit (with
+the never-chosen rule and, optionally, `bias_correct = "jackknife"`),
+`remnl()` integrates out random alternative-specific intercepts, and
+`mundlak()` adds unit means of the covariates for a correlated random-effects
+specification. These are covered in the vignette *Beyond IIA*.
+
+## Reporting
+
+`broom::tidy()` and `broom::glance()` work on every fit, and `texreg` and
+`modelsummary` tables can be built directly from the fitted objects.
+
+```{r broom, eval = requireNamespace("broom", quietly = TRUE)}
+head(broom::tidy(m, conf.int = TRUE), 4)
+broom::glance(m)
+```
+
+## Where next
+
+* *The inflated multinomial logit* fits the model of Bagozzi and
+  Marchetti (2017) and reproduces the published applications.
+* *Testing IIA and specification* covers `iia_tests()` and the further tests,
+  with the size study that motivates the recommendations.
+* *Beyond IIA* covers the nested logit, HEV, probit, random intercepts, and
+  the fixed-effects tools.
+* *Seven published analyses* works through the example datasets drawn from
+  replication archives (`sanctions`, `fluvax`, `bes1987`, `defection`,
+  `bes2010`, `cabinets`, `afghan_leaders`), four of them reproducing their
+  published models, one of them with Firth's penalized likelihood under
+  separation.
+
+## References
+
+Allison, P.D. and Christakis, N.A. (1994). Logit models for sets of ranked
+items. *Sociological Methodology*, 24, 199-228.
+
+Arceneaux, K. and Kolodny, R. (2009). Educating the least informed: Group
+endorsements in a grassroots campaign. *American Journal of Political
+Science*, 53, 755-770.
+
+Bagozzi, B.E. and Marchetti, K. (2017). Distinguishing occasional abstention
+from routine indifference in models of vote choice. *Political Science
+Research and Methods*, 5(2), 277-294.
+
+Beggs, S., Cardell, S. and Hausman, J. (1981). Assessing the potential demand
+for electric cars. *Journal of Econometrics*, 17, 1-19.
+
+Chapman, R.G. and Staelin, R. (1982). Exploiting rank ordered choice set data
+within the stochastic utility model. *Journal of Marketing Research*, 19,
+288-301.
+
+Hausman, J.A. and Ruud, P.A. (1987). Specifying and testing econometric models
+for rank-ordered data. *Journal of Econometrics*, 34, 83-104.
+
+McFadden, D. (1974). Conditional logit analysis of qualitative choice
+behavior. In P. Zarembka (ed.), *Frontiers in Econometrics*, 105-142.
+Academic Press.
+
+Oscarsson, H. and Rosema, M. (2019). Consideration set models of electoral
+choice: Theory, method, and application. *Electoral Studies*, 57, 256-262.
+
+Theil, H. (1969). A multinomial extension of the linear logit model.
+*International Economic Review*, 10, 251-259.

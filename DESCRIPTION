@@ -1,0 +1,58 @@
+Package: polychoice
+Type: Package
+Title: Multinomial Choice, Inflated Multinomial Logit, and Tests of IIA
+Version: 0.1.0
+Authors@R: person("Benjamin E.", "Bagozzi", email = "bagozzib@udel.edu",
+    role = c("aut", "cre"), comment = c(ORCID = "0000-0002-6233-6453"))
+Description: Estimation, inference, quantities of interest, and specification
+    tests for unordered polytomous (multinomial) choice outcomes. Fits the
+    multinomial and conditional logit with case-specific and alternative-specific
+    covariates, varying choice sets, frequency weights, offsets, unit fixed
+    effects (with a split-panel jackknife bias correction), and analytic,
+    outer-product, robust, cluster-robust, or bootstrap standard errors; the
+    baseline-inflated multinomial logit of Bagozzi and Marchetti (2017)
+    <doi:10.1017/psrm.2015.42> for any inflated alternative, and with several
+    inflated alternatives the parametrized logit captivity model of Swait and
+    Ben-Akiva (1987) <doi:10.1016/0191-2615(87)90010-5>, which generalizes the
+    dogit of Gaudry and Dagenais (1979) <doi:10.1016/0191-2615(79)90028-6>; the
+    two-level nested
+    logit, the heteroskedastic extreme value model, the multinomial probit, and
+    the multinomial logit with random alternative-specific intercepts; the
+    rank-ordered logit (Beggs, Cardell and Hausman 1981
+    <doi:10.1016/0304-4076(81)90056-7>) for complete, partial, and tied
+    rankings (Allison and Christakis 1994 <doi:10.2307/270983>); for
+    separated data, an exact linear-programming check for separation,
+    likelihood-ratio tests from the suprema of the log-likelihood (Rainey 2024
+    <doi:10.1017/pan.2023.28>), and penalized estimates of the multinomial,
+    conditional, and rank-ordered logit under Firth's (1993)
+    <doi:10.1093/biomet/80.1.27> penalty or weakly informative priors
+    (Gelman, Jakulin, Pittau and Su 2008 <doi:10.1214/08-AOAS191>); predicted
+    probabilities, first differences, and relative risk ratios; fit statistics,
+    Vuong (1989) <doi:10.2307/1912557>, likelihood-ratio, and
+    parametric-bootstrap comparisons; the existing
+    battery of tests of the independence of irrelevant alternatives, Hausman and
+    McFadden (1984) <doi:10.2307/1910997>, Small and Hsiao (1985)
+    <doi:10.2307/2526707>, the composite-likelihood Hausman and GMM
+    overidentification tests of Fok and Paap (2025)
+    <doi:10.1016/j.jocm.2024.100531>, and the nested-logit score test of
+    McFadden (1987) <doi:10.1016/0304-4076(87)90067-4>; score and
+    likelihood-ratio tests for captive choosers against the dogit (Tse 1987
+    <doi:10.1080/07350015.1987.10509587>; Self and Liang 1987
+    <doi:10.1080/01621459.1987.10478472>); and the specification
+    tests of Cramer and Ridder (1991) <doi:10.1016/0304-4076(91)90102-J> and
+    Fagerland, Hosmer and Bofin (2008) <doi:10.1002/sim.3202>. The likelihoods
+    and their gradients are implemented in 'C++'.
+License: GPL-3
+Encoding: UTF-8
+LazyData: true
+Depends: R (>= 4.0)
+Imports: Rcpp, stats, Formula, MASS, numDeriv, methods, parallel, utils, lpSolveAPI
+LinkingTo: Rcpp
+Suggests: nnet, mlogit, dfidx, AER, mvtnorm, lme4, testthat (>= 3.1.5), knitr, rmarkdown, broom,
+    modelsummary, texreg, brglm2, logistf, coxphf, detectseparation, survival
+VignetteBuilder: knitr
+Roxygen: list(markdown = TRUE, load = "source")
+URL: https://github.com/bagozzib/polychoice
+BugReports: https://github.com/bagozzib/polychoice/issues
+Config/testthat/edition: 3
+Config/roxygen2/version: 8.1.0

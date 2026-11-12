@@ -1,0 +1,87 @@
+## Several inflated (captive) alternatives in imnl(): the kernel against the
+## single-alternative kernel, derivatives, the dogit closed form, the
+## embedding of the single-alternative model, the methods; the captivity score
+## test against numerical derivatives of the dogit likelihood.
+
+.Bcap <- cbind(b = c(0.5, -1, 0.8), c = c(-0.3, 0.6, -0.5), d = c(0.2, 0.4, 0.3))
+
+test_that("captive kernel: at one inflated alternative it is the imnl() kernel; derivatives; the dogit closed form", {
+  set.seed(21)
+  d <- rmnl(400, beta = .Bcap, delta = c(0.8, 1.1), inflate = "a")
+  m1 <- suppressMessages(imnl(y ~ x1 + x2 | z1, data = d, inflate = "a"))
+  D <- m1$design; th <- m1$theta + rnorm(length(m1$theta), 0, 0.2)
+  f1 <- polychoice:::.pc_fns(D)
+  a <- list(D$X, D$W, D$Z, D$off, D$avail, D$y - 1L, D$J, D$base - 1L, D$k - 1L)
+  expect_equal(do.call(polychoice:::pc_cap_lli_cpp, c(list(th), a)), f1$lli(th), tolerance = 1e-12)
+  expect_equal(do.call(polychoice:::pc_cap_grad_cpp, c(list(th), a[1:6], list(D$w), a[7:9])), -f1$grad(th), tolerance = 1e-12)
+  expect_equal(do.call(polychoice:::pc_cap_hess_cpp, c(list(th), a[1:6], list(D$w), a[7:9])), -f1$hess(th), tolerance = 1e-12)
+  ## two captive alternatives, one of them absent from some choice sets
+  dl <- rmnl(400, beta = .Bcap, gamma = 0.6)
+  drop <- sample(which(dl$alt %in% c("a", "c") & dl$chosen == 0), 250)
+  dl <- dl[-drop, ]; dl$z1 <- ave(rnorm(nrow(dl)), dl$id)
+  m2 <- suppressWarnings(suppressMessages(imnl(chosen ~ w1 | x1 + x2 | z1, data = dl, id = "id", alt = "alt", inflate = c("a", "c"))))
+  expect_equal(grep("^infl_", names(coef(m2)), value = TRUE), c("infl_a:(Intercept)", "infl_a:z1", "infl_c:(Intercept)", "infl_c:z1"))
+  fn <- polychoice:::.pc_fns(m2$design); th2 <- m2$theta + rnorm(length(m2$theta), 0, 0.2)
+  expect_equal(-fn$grad(th2), numDeriv::grad(function(t) sum(fn$lli(t)), th2), tolerance = 1e-6)
+  expect_equal(-fn$hess(th2), numDeriv::jacobian(function(t) -fn$grad(t), th2), tolerance = 1e-6)
+  expect_equal(colSums(fn$scores(th2)), -fn$grad(th2), tolerance = 1e-10)
+  ## intercept-only split: P*_j = (P_j + theta_j) / (1 + sum_{c available} theta_c), theta_c = exp(-delta_c)
+  m3 <- suppressWarnings(suppressMessages(imnl(chosen ~ w1 | x1 + x2 | 1, data = dl, id = "id", alt = "alt", inflate = c("a", "c"))))
+  pr <- polychoice:::.pc_fns(m3$design)$probs(m3$theta); A <- m3$design$avail
+  Th <- matrix(0, nrow(A), ncol(A)); Th[, m3$design$kc] <- matrix(exp(-m3$theta[m3$design$idx$delta]), nrow(A), 2L, byrow = TRUE) * A[, m3$design$kc]
+  expect_equal(pr$prob, (pr$prob_outcome + Th) / (1 + rowSums(Th)), tolerance = 1e-12)
+  expect_equal(unname(rowSums(pr$prob)), rep(1, nrow(A)), tolerance = 1e-12)
+})
+
+test_that("imnl() with two inflated alternatives: recovery, methods, the nesting of the single-alternative model", {
+  skip_on_cran()                                    # slow; runs in the full suite (check time, 2026-11-06)
+  set.seed(22)
+  dd <- rmnl(3000, beta = .Bcap, delta = cbind(a = c(1.0, 0.8), c = c(1.8, -0.7)), inflate = c("a", "c"))
+  expect_true(all(dd$y[dd$regime == "a"] == "a") && all(dd$y[dd$regime == "c"] == "c"))
+  m <- imnl(y ~ x1 + x2 | z1, data = dd, inflate = c("a", "c"))
+  truth <- c(.Bcap, 1.0, 0.8, 1.8, -0.7)
+  expect_true(all(abs(coef(m) - truth) < 3.5 * sqrt(diag(vcov(m)))))
+  expect_true(m$converged); expect_false(m$boundary)
+  expect_equal(m$inflate, c("a", "c"))
+  expect_match(polychoice:::.pc_title(m), "inflated alternatives: a, c")
+  rg <- predict(m, type = "regime")
+  expect_equal(colnames(rg), c("choice", "a", "c")); expect_equal(unname(rowSums(rg)), rep(1, m$n), tolerance = 1e-12)
+  expect_equal(unname(rg[, "choice"]), unname(m$phi))
+  po <- predict(m, type = "posterior")
+  expect_equal(unname(rowSums(po)), rep(1, m$n), tolerance = 1e-12)
+  expect_true(all(po[m$y == 2L, "a"] == 0 & po[m$y == 2L, "choice"] == 1))      # a case that chose b is in the choice regime
+  expect_equal(nrow(first_difference(m, "z1", 0, 1, type = "regime", ci = "none")), 3L)
+  s <- summary(m); expect_length(s$share_inflated, 2L)
+  expect_output(print(s), "Inflated alternatives 'a', 'c'")
+  if (requireNamespace("broom", quietly = TRUE)) expect_equal(broom::glance(m)$share_inflated, mean(dd$y %in% c("a", "c")))
+  ## the single-alternative model is the boundary captivity(c) = 0: its embedding reproduces its log-likelihood
+  ms <- imnl(y ~ x1 + x2 | z1, data = dd, inflate = "a")
+  emb <- polychoice:::.pc_embed(ms$theta, ms$design, m$design)
+  expect_equal(-polychoice:::.pc_fns(m$design)$nll(emb), ms$loglik, tolerance = 1e-6)
+  expect_error(lr_test(ms, m), "boot_lr_test")
+  expect_equal(polychoice:::.pc_nesting(ms, m, allow_inflation = TRUE), "inflation")
+  expect_error(imnl(y ~ x1 + x2 | z1, data = dd, inflate = c("a", "c"), link = "probit"), "logit split")
+  expect_error(imnl(y ~ x1 + x2 | z1, data = dd, inflate = c("a", "a")), "more than once")
+  ## rmnl() with one inflated alternative draws exactly as before (the same random stream)
+  set.seed(5); d1 <- rmnl(50, beta = .Bcap, delta = c(0.5, 1), inflate = "a")
+  expect_false("regime" %in% names(d1))
+})
+
+test_that("captivity_test(): the score is the derivative of the dogit log-likelihood; power against baseline captivity", {
+  skip_on_cran()                                    # slow; runs in the full suite (check time, 2026-11-06)
+  set.seed(31)
+  B <- cbind(b = c(0.5, -1, 0.8), c = c(-0.3, 0.6, -0.5))
+  d <- rmnl(1500, beta = B)
+  m <- mnl(y ~ x1 + x2, data = d)
+  ct <- captivity_test(m)
+  expect_equal(ct$test, c("captive: a", "captive: b", "captive: c", "joint"))
+  P <- fitted(m); Y <- stats::model.matrix(~ y - 1, d)
+  dll <- function(theta) sum(log(rowSums(sweep(P, 2L, theta, "+") / (1 + sum(theta)) * Y)))
+  expect_equal(unname(attr(ct, "scores")), numDeriv::grad(dll, rep(0, 3)), tolerance = 1e-6)
+  expect_true(all(is.finite(ct$statistic)))
+  dp <- rmnl(1500, beta = B, delta = c(qlogis(0.8), 0), inflate = "a")
+  cp <- captivity_test(mnl(y ~ x1 + x2, data = dp), alternatives = "a")
+  expect_lt(cp$p.value[1L], 0.001)
+  expect_error(captivity_test(imnl(y ~ x1 + x2 | x1, data = dp)), "multinomial logit")
+  expect_error(captivity_test(mnl(y ~ 1, data = d)), "not identified")
+})

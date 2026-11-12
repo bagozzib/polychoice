@@ -1,0 +1,35 @@
+vuong(imnl, mnl) under the MNL null: 400 of 400 replications fitted, n = 1000, 3.4 s per replication 
+  statistics undefined (fits practically the same model): 38 of 400 replications 
+  v_raw  median +0.569, IQR 0.665 | reject two-sided 0.05: 0.003 of defined, 0.002 of all | favours imnl (one-sided 0.05): 0.008 | favours mnl: 0.000 
+  v_aic  median -1.036, IQR 2.407 | reject two-sided 0.05: 0.345 of defined, 0.312 of all | favours imnl (one-sided 0.05): 0.000 | favours mnl: 0.376 
+  v_bic  median -5.314, IQR 6.916 | reject two-sided 0.05: 0.909 of defined, 0.823 of all | favours imnl (one-sided 0.05): 0.000 | favours mnl: 0.939 
+  LR: mean 1.826, quantiles 50/90/95: 1.23/4.69/5.71; reject vs chi-square(2) 0.045, vs 50:50 chi-square(1)/(2) mixture 0.082 
+  imnl at the boundary in 0.220 of replications; not converged in 0.000; replications with warnings 0.220 
+polychoice 0.1.0 from C:/Users/bagoz/AppData/Local/pc_chain5/tmp/tmp.mWt8YgcX60/lib/polychoice 
+build: beb30c4880b2 
+R version 4.6.1 (2026-06-24 ucrt)
+Platform: x86_64-w64-mingw32/x64
+Running under: Windows 11 x64 (build 26300)
+
+Matrix products: default
+  LAPACK version 3.12.1
+
+locale:
+[1] LC_COLLATE=English_United States.utf8 
+[2] LC_CTYPE=English_United States.utf8   
+[3] LC_MONETARY=English_United States.utf8
+[4] LC_NUMERIC=C                          
+[5] LC_TIME=English_United States.utf8    
+
+time zone: America/New_York
+tzcode source: internal
+
+attached base packages:
+[1] stats     graphics  grDevices utils     datasets  methods   base     
+
+other attached packages:
+[1] polychoice_0.1.0
+
+loaded via a namespace (and not attached):
+[1] MASS_7.3-65    httr_1.4.8     compiler_4.6.1 R6_2.6.1       tools_4.6.1   
+[6] Rcpp_1.1.2     texreg_1.39.5  Formula_1.2-6 

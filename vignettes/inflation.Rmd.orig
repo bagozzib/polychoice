@@ -1,0 +1,334 @@
+---
+title: "The inflated multinomial logit"
+author: "Benjamin E. Bagozzi"
+output:
+  rmarkdown::html_vignette:
+    toc: true
+vignette: >
+  %\VignetteIndexEntry{The inflated multinomial logit}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>", fig.width = 6, fig.height = 4,
+                      message = FALSE)
+```
+
+## Two kinds of abstainers
+
+In a model of vote choice the base alternative, abstention, holds two kinds
+of people: *routine* nonvoters, who would not have voted whatever the
+campaign did, and *occasional* nonvoters, who weighed the candidates and
+stayed home this time. A standard multinomial logit treats them as one group
+and, when the mixture is real, misstates how the covariates move people
+between abstention and the candidates. The baseline-inflated multinomial
+logit (BIMNL) of Bagozzi and Marchetti (2017) adds a split equation that
+sorts cases into a regime where the base alternative is observed with
+certainty and a regime where the multinomial choice operates:
+
+\[
+P(s_i = 1 \mid z_i) = \phi_i = F(z_i'\delta), \qquad
+P(y_i = b) = (1 - \phi_i) + \phi_i P_{ib}, \qquad
+P(y_i = j) = \phi_i P_{ij} \ (j \ne b),
+\]
+
+with \(F\) logistic (the default) or standard normal and \(P_{ij}\) the
+multinomial logit probabilities. The same structure fits any alternative that
+mixes two populations: `inflate` names it (default: the base).
+
+In the discrete-choice literature, with the logistic split equation this is
+the parametrized logit captivity model of Swait and Ben-Akiva (1987) with
+captivity to the inflated alternative only. Their model generalizes the dogit
+of Gaudry and Dagenais (1979), which adds to the multinomial logit a share of
+decision makers who are captive to an alternative, by letting the captivity
+odds depend on covariates. Here the captives of the inflated alternative are
+the routine nonvoters, their share is \(1 - \phi_i\), and their odds are
+\(\theta_i = (1 - \phi_i)/\phi_i = e^{-z_i'\delta}\).
+
+## Fitting the model
+
+The formula has two parts: the outcome equation and, after `|`, the split
+equation. `imnl()` fits by maximum likelihood with a multistart because the
+mixture likelihood can have several local maxima (see below).
+
+```{r fit}
+library(polychoice)
+data(pa2006)
+f <- vote ~ canvass + phone + democrat + republican + canvass:democrat + canvass:republican +
+  phone:democrat + phone:republican + household + age + female + voted2004 + district156
+m0 <- mnl(f, data = pa2006)
+m1 <- imnl(vote ~ canvass + phone + democrat + republican + canvass:democrat +
+             canvass:republican + phone:democrat + phone:republican + household + age +
+             female + voted2004 + district156 |
+             household + age + female + voted2004 + district156, data = pa2006)
+summary(m1)
+```
+
+The summary shows the outcome equations (`alternative:term`), the split
+equation (`infl_term`, the coefficients of \(z_i'\delta\) on the scale of the
+link), the observed share of the inflated alternative, and the mean fitted
+probability of the choice regime. The sign convention of the split
+equation: \(\delta\) models \(P(s_i = 1)\), the probability of being in the
+*choice* regime, so the negative `infl_age` printed above means that older
+respondents are less likely to be in the choice regime, that is, more likely
+to be routine abstainers. The estimates agree with the published Table A.3
+of Bagozzi and Marchetti (2017) to within 0.002 in the coefficients and
+standard errors that the package's tests compare (for example 1.564 (0.557)
+for the Republican/other canvassing coefficient against the published 1.566
+(0.558); the package's tests pin a selection of them at tolerances of one to
+ten percent), and the published
+log-likelihoods of both models to their two printed decimals.
+
+## Is the split equation needed?
+
+The plain multinomial logit is the special case \(\phi_i = 1\), a boundary of
+the parameter space, so the likelihood-ratio test does not have its usual
+distribution (and the split-equation slopes are not identified under the
+null, so no simple correction exists; a split with an intercept only is the
+exception, below under "Tests for captive choosers"). The literature compares the two models
+with the Vuong (1989) test, the information criteria, and the classification
+tables: `compare_models()` lines up the information criteria, `vuong()` and
+`classification()` give the other two.
+
+```{r compare}
+compare_models(MNL = m0, BIMNL = m1)
+vuong(m1, m0)
+```
+
+A positive Vuong statistic favours the first model; the three rows apply no
+correction, the AIC correction, and the BIC correction for the number of
+parameters. The normal reference of the Vuong test does not hold for
+models nested at a boundary (Wilson 2015), so the calibrated comparison is the parametric bootstrap under the multinomial logit,
+`boot_lr_test(m0, m1)`, which refits both models on data simulated from the
+MNL and reports bootstrap p-values for the likelihood-ratio and Vuong
+statistics. It is slow: every replicate refits the inflated model with its
+whole search (about 40 seconds on these data), so the default `B = 199`
+takes more than two hours on one core, and `cores`
+spreads the replicates over workers; it is not run here.
+
+## Quantities of interest by stage
+
+Predictions can be made for the observed outcome (`type = "prob"`), for the
+multinomial stage alone (`type = "prob_outcome"`, the probabilities among
+cases in the choice regime), and for the regime itself (`type = "regime"`,
+the probability of being in the choice regime). The labels `infl_` and
+`"inflation"` (the `block` of `summary()`, the `component` of `tidy()`, and
+`stage = "inflation"` in `first_difference()`) all mean the split equation.
+
+```{r predict}
+head(predict(m1, type = "regime"), 3)
+head(predict(m1, type = "prob_outcome"), 3)
+```
+
+`first_difference()` has the same `type` switch (the change in the observed
+probabilities, in the outcome-stage probabilities, or in the regime
+probability) and a `stage` argument that says through which equations the
+covariate is allowed to move: both (default), the outcome equation only, or
+the split equation only. A covariate that appears in both equations, such
+as `age` here, can thus be decomposed.
+
+```{r fd}
+first_difference(m1, "canvass", from = 0, to = 1)
+first_difference(m1, "age", from = 30, to = 60, type = "regime")
+first_difference(m1, "age", from = 30, to = 60, stage = "outcome")
+```
+
+## Local maxima
+
+Mixture likelihoods are not globally concave. On `pa2006` and on `pres2004`
+a search from 200 starts finds two interior maxima of the BIMNL likelihood.
+The fit screens fourteen starting
+values and polishes every one of them. It then challenges the incumbent with
+rescaled split slopes. Each point where these searches end is classified by
+the rules of the fit-quality flags: a local maximum, a boundary (diverging
+coefficients, or a split equation that puts every case in one regime), a
+saddle, or not converged. `m1$search` lists the distinct points, and the
+number of distinct local maxima is reported, with a message when there is
+more than one; the highest found need not be the global maximum. Then
+`crosscheck = TRUE` runs the same search under the probit split and polishes
+the logit from its rescaled estimates (which about doubles the time), and
+`start` probes other basins (a row of `m1$search_theta` refits that point).
+
+```{r modes}
+m1$n_modes
+m1$search
+```
+
+A fit that reports more than one mode is still the highest maximum found;
+`imnl()` says so in a message (hidden in this vignette's output), so that no
+analysis rests on a lower maximum unknowingly. Changing
+the split-equation covariates can change the number and location of the
+maxima.
+
+## The second application: the 2004 presidential vote
+
+`pres2004` holds the Campbell and Monson (2008) respondents of the 2004
+Election Panel Study (Replication II of Bagozzi and Marchetti 2017).
+
+```{r pres}
+data(pres2004)
+f2 <- vote ~ educ + female + black + hispanic + pid7 + bush_values + battleground + south + gmb +
+  agegroup + evangelical + evangelical:gmb + catholic + catholic:gmb + other_religion +
+  secular + secular:gmb + ideology + mobilization
+p0 <- mnl(f2, data = pres2004)
+p1 <- imnl(vote ~ educ + female + black + hispanic + pid7 + bush_values + battleground + south +
+             gmb + agegroup + evangelical + evangelical:gmb + catholic + catholic:gmb +
+             other_religion + secular + secular:gmb + ideology + mobilization |
+             educ + agegroup + mobilization + secular, data = pres2004)
+compare_models(MNL = p0, BIMNL = p1)
+vuong(p1, p0)
+```
+
+The log-likelihoods of the published Table A.4 reproduce: the inflated
+model's -545.279 agrees with the published -545.27 when truncated to its
+printed digits, and a search from 200 starts finds no interior maximum above
+it. So do its split-equation coefficients and the outcome-stage
+coefficients the package's tests check. Two of the search's starts end
+higher, at points where the Kerry and Bush coefficients diverge together
+(the higher at -542.851): the outcome stage predicts 21 abstainers with
+certainty, and the split equation puts the other 84 in the captive regime.
+There the likelihood rises towards a supremum at infinity, a separation
+within the mixture that the logit's data do not show (see `?imnl`). The
+multistart does not reach that region, and the published fit is the highest
+interior maximum. The raw Vuong statistic computed here is 1.68 (positive values
+favour the first model, the inflated one; two-sided p = 0.09): it leans
+towards the inflated model without being decisive. Its BIC-corrected version,
+which charges the inflated model for its extra parameters, is -2.00 and
+leans the other way, and the information criteria disagree with each other,
+as in the published analysis, which reports mixed support for inflation in
+these data. Which row to read: the raw statistic is Vuong's, the AIC and BIC
+rows are his corrections for the difference in parameters; but since the
+logit is the boundary case of the inflated model, none of them has a valid
+normal reference here, and `boot_lr_test(p0, p1)` gives the calibrated
+p-values.
+
+## Tests for captive choosers
+
+Whether the multinomial logit leaves room for routine choosers can be asked
+before any inflated model is fit. `captivity_test()` is the score test of
+the logit against the dogit with a constant captive share for each
+alternative, computed from the logit fit alone: its joint statistic is the
+Lagrange multiplier test of Tse (1987), and the one-sided statistic for each
+alternative is added here. The score of a case for
+alternative \(j\) is \(1\{y_i = j\}/P_{ij} - 1\): it grows when the cases
+that chose \(j\) are ones the logit thought unlikely to, which is what
+captive choosers produce. Each alternative gets a one-sided z statistic
+(captive shares cannot be negative), and a joint test follows.
+
+```{r captivity}
+captivity_test(m0)
+```
+
+Because the logit is an ordinary boundary point of the dogit's captivity
+parameters, the score test is regular there, unlike the comparison with the
+inflated fit. Its weights \(1/P_{ij}\) make it heavy-tailed when some fitted
+probabilities are small; `boot_pvalue(m0, captivity_test)` calibrates it by
+simulation (not run here). The same weights cost it power, and here it does
+not reject although the inflated multinomial logit with a constant captive share of
+abstention, its own alternative, raises the log-likelihood by 10.5 on one
+parameter. The score of abstention is 37.3, but its expected information
+(before the coefficients are partialled out) is
+10,186, half of it from one respondent whose fitted probability of abstaining
+is 0.0002 and who did not abstain, and along the captive share the
+log-likelihood is convex at zero, so the gain lies away from the null, where
+a local test does not look. A small statistic is no evidence against
+captivity. The likelihood-ratio form measures the gain itself: it fits the
+inflated multinomial logit with an intercept-only split for each requested alternative
+and refers the likelihood ratio to the 50:50 mixture of chi-square(0) and
+chi-square(1), since a captive share of zero is a regular boundary point
+when the alternative's fitted probabilities vary in a way its constants and
+slopes cannot absorb (otherwise the share is not identified, and the test
+says so; one refit per alternative):
+
+```{r captivity-lr}
+captivity_test(m0, alternatives = "abstain", type = "lr")
+```
+
+A split equation with covariates, as in Replication I, is not of this kind
+(its slopes are not identified at the boundary), and `boot_lr_test()`
+calibrates that comparison.
+
+## Several inflated alternatives
+
+`inflate` can name several alternatives. A case is then either in the choice
+regime, where the multinomial logit operates, or captive to one of the
+inflated alternatives, with the regime probabilities given by a multinomial
+logit in the split covariates: the parametrized logit captivity model with a
+captive share for each inflated alternative. In vote choice this holds routine
+nonvoters and party loyalists in one model. Each inflated alternative gets
+its own split coefficients, `infl_<alternative>:<term>`, the log-odds of
+choosing against captivity to that alternative (positive: less captivity).
+
+```{r captive}
+set.seed(1)
+dc <- rmnl(2000, beta = cbind(b = c(0.5, -1, 0.8), c = c(-0.3, 0.6, -0.5), d = c(0.2, 0.4, 0.3)),
+           delta = cbind(a = c(1, 0.8), c = c(1.8, -0.7)), inflate = c("a", "c"))
+mc <- imnl(y ~ x1 + x2 | z1, data = dc, inflate = c("a", "c"))
+summary(mc)$coefficients[grep("^infl_", names(coef(mc))), ]
+head(predict(mc, type = "regime"), 3)
+```
+
+The split coefficients lie within 1.5 standard errors of the values used to
+simulate them (1 and 0.8 for `a`, 1.8 and -0.7 for `c`). The likelihood can
+also peak near the limit in which the choice regime never picks `a`, with
+every choice of `a` ascribed to captivity. In a scan of 20 samples of this
+design one did (seed 9):
+
+* the outcome constants ran to about 10, with standard errors above 13;
+* the split constant of `a` fell to 0.34, with a standard error of 0.065,
+  against its true value of 1.
+
+That is the data's own maximum: a refit from the true values reaches it, and
+one from the outcome constants raised by 5 returns to it. The fit raises no
+flag. Large outcome constants with larger standard errors are the sign. At
+such a fit the split coefficients' small standard errors are the misleading
+part, and the bootstrap does not repair them: 200 refits give the split
+constant of `a` a standard error of 0.084, against the analytic 0.065, for
+an estimate 0.34 whose true value is 1, although they put the outcome
+constants' standard errors above 300. Compare instead with the model that
+has fewer inflated alternatives, by `boot_lr_test()`.
+
+The model with fewer inflated alternatives is the boundary at which a
+captive share is zero, so `boot_lr_test(imnl(y ~ x1 + x2 | z1, data = dc,
+inflate = "a"), mc)` compares the two by simulation, as it compares the
+inflated model with the logit.
+
+The split covariate here, `z1`, is not in the outcome equations. In the
+simulation reported in `?imnl`, splitting on an outcome covariate instead
+left the intervals of that covariate's outcome coefficients at 0.89-0.90
+coverage with 5,000 cases and 0.80-0.81 with 2,000.
+
+## Links and boundaries
+
+`link = "probit"` replaces the logistic split equation by a standard normal
+one (with one inflated alternative). When the split equation puts every case in one regime the inflated model
+collapses onto the multinomial logit, and with several inflated alternatives
+a captive share can collapse to zero; the fit then warns that it is at a
+boundary, and the standard errors of the split coefficients are not to be
+interpreted.
+
+## References
+
+Bagozzi, B.E. and Marchetti, K. (2017). Distinguishing occasional abstention
+from routine indifference in models of vote choice. *Political Science
+Research and Methods*, 5(2), 277-294.
+
+Campbell, D.E. and Monson, J.Q. (2008). The religion card: Gay marriage and
+the 2004 presidential election. *Public Opinion Quarterly*, 72, 399-419.
+
+Gaudry, M.J.I. and Dagenais, M.G. (1979). The dogit model. *Transportation
+Research Part B*, 13, 105-111.
+
+Swait, J. and Ben-Akiva, M. (1987). Empirical test of a constrained choice
+discrete model: Mode choice in Sao Paulo, Brazil. *Transportation Research
+Part B*, 21, 103-115.
+
+Tse, Y.K. (1987). A diagnostic test for the multinomial logit model.
+*Journal of Business and Economic Statistics*, 5, 283-286.
+
+Vuong, Q.H. (1989). Likelihood ratio tests for model selection and
+non-nested hypotheses. *Econometrica*, 57, 307-333.
+
+Wilson, P. (2015). The misuse of the Vuong test for non-nested models to test
+for zero-inflation. *Economics Letters*, 127, 51-53.

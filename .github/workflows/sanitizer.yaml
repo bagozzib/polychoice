@@ -1,0 +1,129 @@
+# Undefined-behaviour and address sanitizers on the C++ likelihoods, in the r-hub containers.
+#
+# Carried over from underdisp, where CRAN's macOS-arm64 sanitizer build (M1-SAN) and then its Linux
+# clang-UBSAN flavour reported undefined behaviour that none of the ordinary check platforms saw: a
+# sanitizer finding does not change the check status, so the errors appear only as "runtime error:" lines
+# inside the .Rout files while 00check.log still reads "Status: OK", and CRAN's run reached the sites
+# through the vignette build as well as the examples and tests. This workflow therefore exercises the
+# vignettes explicitly, captures every line of output to disk, and does not trust any exit code: it greps
+# everything for sanitizer output and fails the job on any hit.
+#
+# Why the vignettes are rendered by tools::buildVignettes() directly: R CMD build and R CMD check both
+# render them in a child R process whose output they capture and discard when the render succeeds, so a
+# sanitizer diagnostic printed during a successful render never reaches their logs. CRAN's
+# build_vignettes.log is the direct call's output, and so is ours.
+#
+# To confirm that a C++ fix removes a finding, push the unfixed code to a sanitizer/** branch as a control
+# (it should fail) and the fix to a fix/** branch (it should pass).
+name: sanitizer
+
+on:
+  push:
+    branches: ['fix/**', 'sanitizer/**']
+  workflow_dispatch:
+
+jobs:
+  sanitize:
+    runs-on: ubuntu-latest
+    name: ${{ matrix.container }}
+    strategy:
+      fail-fast: false
+      matrix:
+        container: [clang-ubsan, clang-asan]
+    container:
+      image: ghcr.io/r-hub/containers/${{ matrix.container }}:latest
+    timeout-minutes: 240
+    env:
+      # The comparison packages in Suggests (mlogit, dfidx, AER, lme4, nnet, mvtnorm, broom, modelsummary,
+      # texreg) back tests that skip when the package is absent, and compiling them under a sanitizer costs
+      # far more than it tells us. testthat is NOT optional: without it R CMD check runs no tests at all.
+      # knitr and rmarkdown are needed to build the vignettes, which reach the same compiled code.
+      _R_CHECK_FORCE_SUGGESTS_: false
+      R_KEEP_PKG_SOURCE: yes
+      R_LIBS_USER: /tmp/rlib
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: r-lib/actions/setup-pandoc@v2
+
+      # pak's binary mirror occasionally fails a download, so the install is retried before the job gives up.
+      - name: Install dependencies
+        run: |
+          mkdir -p /tmp/rlib
+          for i in 1 2 3; do
+            R -q -e 'pak::pkg_install(c("deps::.", "any::testthat", "any::knitr", "any::rmarkdown"), dependencies = NA)' && break
+            echo "install attempt $i failed; retrying in 30 s"; sleep 30
+          done
+          R -q -e 'stopifnot(requireNamespace("testthat"), requireNamespace("knitr"), requireNamespace("rmarkdown"))'
+          pandoc --version | head -1
+
+      - name: Install the package under the sanitizer
+        run: |
+          R CMD INSTALL --preclean . 2>&1 | tee /tmp/install.log
+
+      # The vignette path, with its output on disk. Rendered in a copy so the source tree stays clean
+      # for R CMD build below.
+      - name: Render the vignettes directly (tools::buildVignettes)
+        run: |
+          mkdir -p check
+          rm -rf /tmp/vigpkg && cp -r . /tmp/vigpkg
+          cd /tmp/vigpkg
+          R -q -e 'tools::buildVignettes(dir = ".", tangle = TRUE, clean = FALSE)' 2>&1 | tee "$GITHUB_WORKSPACE/check/build_vignettes.log"
+          ls -la vignettes/ | tee -a "$GITHUB_WORKSPACE/check/build_vignettes.log"
+          for v in vignettes/*.Rmd; do
+            h="${v%.Rmd}.html"
+            test -f "$h" || { echo "::error::$v did not render -- its code path was not exercised"; exit 1; }
+          done
+          echo "every vignette rendered directly."
+
+      - name: R CMD build (vignettes included)
+        run: |
+          R CMD build . 2>&1 | tee check/build.log
+
+      - name: R CMD check
+        run: |
+          R CMD check --no-manual -o check polychoice_*.tar.gz 2>&1 | tee check/check.log || true
+
+      - name: Confirm the tests and the vignettes actually ran
+        run: |
+          if [ ! -f check/*.Rcheck/tests/testthat.Rout ] && [ ! -f check/*.Rcheck/tests/testthat.Rout.fail ]; then
+            echo "::error::no testthat output -- the suite did not run, so this proves nothing"
+            ls -R check/*.Rcheck/tests || true
+            exit 1
+          fi
+          echo "testthat output present."
+          if ! grep -q "creating vignettes" check/build.log; then
+            echo "::error::the vignettes were not built into the tarball"
+            exit 1
+          fi
+          for v in vignettes/*.Rmd; do
+            b="$(basename "${v%.Rmd}")"
+            tar -tzf polychoice_*.tar.gz | grep -q "inst/doc/$b.html" || { echo "::error::inst/doc/$b.html is not in the tarball"; exit 1; }
+          done
+          echo "every vignette built into the tarball."
+          if ! grep -q "checking re-building of vignette outputs" check/check.log; then
+            echo "::error::R CMD check did not re-build the vignettes"
+            exit 1
+          fi
+          echo "vignettes re-built during check."
+
+      - name: Fail if the sanitizer reported anything
+        run: |
+          echo "Searching the vignette, build and check output for sanitizer diagnostics..."
+          if grep -rnE "runtime error:|AddressSanitizer|UndefinedBehaviorSanitizer|SUMMARY: .*Sanitizer" check/ /tmp/install.log ; then
+            echo "::error::${{ matrix.container }} reported sanitizer diagnostics (see the matches above)"
+            exit 1
+          fi
+          echo "Clean: no sanitizer diagnostics in the vignette, build or check output."
+
+      - name: Show the check log
+        if: always()
+        run: cat check/*.Rcheck/00check.log || true
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: check-${{ matrix.container }}
+          path: check
+          retention-days: 14

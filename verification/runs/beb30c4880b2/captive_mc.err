@@ -1,0 +1,2 @@
+Warning message:
+In sqrt(diag(vcov(m))) : NaNs produced
