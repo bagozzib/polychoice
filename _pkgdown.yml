@@ -1,0 +1,132 @@
+url: https://bagozzib.github.io/polychoice/
+
+template:
+  bootstrap: 5
+  bslib:
+    primary: "#2C3E50"
+
+home:
+  title: "polychoice: Multinomial Choice, Inflated Multinomial Logit, and Tests of IIA"
+  description: >
+    Multinomial choice models for R: the multinomial and conditional logit,
+    the inflated multinomial logit, the nested logit, the heteroskedastic
+    extreme value model, the multinomial probit, random alternative-specific
+    intercepts, and the rank-ordered logit, with tests of the independence of
+    irrelevant alternatives, parametric-bootstrap calibration, exact checks
+    of separation, and one set of quantities of interest for every model.
+
+navbar:
+  structure:
+    left: [intro, reference, articles, news]
+    right: [search, github]
+  components:
+    intro:
+      text: Get started
+      href: articles/polychoice.html
+    articles:
+      text: Articles
+      menu:
+        - text: Getting started with polychoice
+          href: articles/polychoice.html
+        - text: Testing IIA and specification
+          href: articles/iia.html
+        - text: The inflated multinomial logit
+          href: articles/inflation.html
+        - text: "Beyond IIA: nested logit, HEV, multinomial probit, random intercepts, and panels"
+          href: articles/beyond.html
+        - text: Seven published analyses
+          href: articles/applications.html
+
+reference:
+  - title: Package overview
+    contents:
+      - polychoice-package
+  - title: Estimators
+    desc: >
+      One formula interface, one class, one set of methods.
+    contents:
+      - mnl
+      - imnl
+      - nlogit
+      - hev
+      - mnprobit
+      - remnl
+      - rologit
+  - title: Separation and priors
+    contents:
+      - separation
+      - coef_prior
+  - title: Inference and summaries
+    contents:
+      - summary.choicemodel
+      - confint.choicemodel
+      - update.choicemodel
+      - residuals.choicemodel
+  - title: Quantities of interest
+    contents:
+      - predict.choicemodel
+      - first_difference
+      - rrr
+  - title: Fit and model comparison
+    contents:
+      - fit_stats
+      - classification
+      - compare_models
+      - lr_test
+      - vuong
+      - boot_lr_test
+  - title: Tests of IIA
+    contents:
+      - iia_tests
+      - hausman_mcfadden
+      - small_hsiao
+      - fp_tests
+      - nested_lm_test
+  - title: Further specification tests
+    contents:
+      - captivity_test
+      - combine_test
+      - term_test
+      - hl_test
+      - rank_test
+      - boot_pvalue
+  - title: Panel tools
+    contents:
+      - mundlak
+  - title: Simulation
+    contents:
+      - rmnl
+      - rnlogit
+      - rhev
+      - rmnp
+      - rrologit
+      - simulate.choicemodel
+  - title: broom methods
+    contents:
+      - tidy.choicemodel
+      - glance.choicemodel
+      - augment.choicemodel
+  - title: Data
+    contents:
+      - pa2006
+      - pres2004
+      - sanctions
+      - fluvax
+      - bes1987
+      - defection
+      - bes2010
+      - cabinets
+      - afghan_leaders
+
+articles:
+  - title: Using polychoice
+    navbar: ~
+    contents:
+      - polychoice
+      - iia
+      - inflation
+      - beyond
+      - applications
+
+news:
+  one_page: true
