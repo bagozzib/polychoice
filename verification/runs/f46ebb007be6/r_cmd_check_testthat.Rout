@@ -1,0 +1,59 @@
+
+R version 4.6.1 (2026-06-24 ucrt) -- "Happy Hop"
+Copyright (C) 2026 The R Foundation for Statistical Computing
+Platform: x86_64-w64-mingw32/x64
+
+R is free software and comes with ABSOLUTELY NO WARRANTY.
+You are welcome to redistribute it under certain conditions.
+Type 'license()' or 'licence()' for distribution details.
+
+R is a collaborative project with many contributors.
+Type 'contributors()' for more information and
+'citation()' on how to cite R or R packages in publications.
+
+Type 'demo()' for some demos, 'help()' for on-line help, or
+'help.start()' for an HTML browser interface to help.
+Type 'q()' to quit R.
+
+> library(testthat)
+> library(polychoice)
+> 
+> test_check("polychoice")
+Inclusive-value parameter(s) above 1 (lambda): outside the range consistent with random-utility maximization for all covariate values; the nesting may be wrong or unnecessary (lr_test() against the mnl() fit).
+Inclusive-value parameter(s) above 1 (lambda:fast): outside the range consistent with random-utility maximization for all covariate values; the nesting may be wrong or unnecessary (lr_test() against the mnl() fit).
+2 case(s) with a single available alternative carry no information and are dropped.
+Non-integer weights are treated as frequency weights (the weight total is the sample size of the standard errors, information criteria, and tests); survey (probability) weights are not supported, see ?mnl.
+Non-integer weights are treated as frequency weights (the weight total is the sample size of the standard errors, information criteria, and tests); survey (probability) weights are not supported, see ?mnl.
+Non-integer weights are treated as frequency weights (the weight total is the sample size of the standard errors, information criteria, and tests); survey (probability) weights are not supported, see ?mnl.
+2 case(s) whose ranking carries no information (no alternative ranked above another) are dropped.
+2 case(s) whose ranking carries no information (no alternative ranked above another) are dropped.
+2 case(s) whose ranking carries no information (no alternative ranked above another) are dropped.
+2 case(s) whose ranking carries no information (no alternative ranked above another) are dropped.
+[ FAIL 0 | WARN 0 | SKIP 55 | PASS 999 ]
+
+══ Skipped tests (55) ══════════════════════════════════════════════════════════
+• On CRAN (55): 'test-captive.R:37:3', 'test-captive.R:71:3',
+  'test-families.R:27:3', 'test-families.R:108:3', 'test-families.R:156:3',
+  'test-firth.R:118:3', 'test-firth.R:133:3', 'test-firth.R:169:3',
+  'test-firth.R:189:3', 'test-firth.R:235:3', 'test-firth.R:265:3',
+  'test-firth.R:280:3', 'test-iia.R:39:3', 'test-methods.R:6:3',
+  'test-methods.R:29:3', 'test-methods.R:66:3', 'test-methods.R:96:3',
+  'test-mi.R:26:3', 'test-mnp.R:59:3', 'test-panel.R:19:3',
+  'test-panel.R:41:3', 'test-paths.R:21:3', 'test-paths.R:42:3',
+  'test-paths.R:56:3', 'test-phase4d.R:77:3', 'test-phase4e.R:38:3',
+  'test-phase4e.R:48:3', 'test-phase4e.R:70:3', 'test-phase4e.R:101:3',
+  'test-phase4e.R:117:3', 'test-published.R:17:3', 'test-published.R:51:3',
+  'test-re.R:57:3', 'test-re.R:69:3', 'test-re.R:84:3', 'test-review.R:200:3',
+  'test-review2.R:23:3', 'test-review2.R:38:3', 'test-review2.R:94:3',
+  'test-review3.R:54:3', 'test-review4.R:19:3', 'test-review4.R:33:3',
+  'test-review4.R:53:3', 'test-review4.R:80:3', 'test-review4.R:114:3',
+  'test-search.R:24:3', 'test-search.R:45:3', 'test-search.R:107:3',
+  'test-separation.R:52:3', 'test-spec.R:70:3', 'test-stress.R:4:3',
+  'test-stress.R:55:3', 'test-stress.R:170:3', 'test-stress.R:257:3',
+  'test-suprema.R:191:3'
+
+[ FAIL 0 | WARN 0 | SKIP 55 | PASS 999 ]
+> 
+> proc.time()
+   user  system elapsed 
+  93.32    7.29  101.46 

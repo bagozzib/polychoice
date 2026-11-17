@@ -47,7 +47,7 @@ Initial CRAN release. Features:
   `term_test()`, `hl_test()`, `boot_pvalue()` (the parametric bootstrap of
   the tests whose null is the fitted model); `rank_test()` (stability of
   preferences across ranking stages); `captivity_test()` (score test of the
-  logit against captive choosers, the dogit of Gaudry and Dagenais 1979, and
+  multinomial logit against captive choosers, the dogit of Gaudry and Dagenais 1979, and
   with `type = "lr"` the likelihood ratio against a constant captive share,
   which `lr_test()` also takes).
 * Simulators `rmnl()`, `rnlogit()`, `rhev()`, `rmnp()`, `rrologit()`; `mundlak()`.

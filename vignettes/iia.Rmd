@@ -322,35 +322,33 @@ tests, the rows of the battery that reject:
 
 ``` r
 set.seed(2)
-bf <- boot_pvalue(m, fp_tests, B = 49)
+bf <- boot_pvalue(m, fp_tests, B = 399)
 bf
-#> Fok-Paap (2025) misspecification tests, all pairs -- parametric bootstrap, 49 replicates, 10 with a warning in the refit (attribute "flag_reasons") 
+#> Fok-Paap (2025) misspecification tests, all pairs -- parametric bootstrap, 399 replicates, 47 with a warning in the refit (attribute "flag_reasons"), up to 47 with an NA statistic left out of a row (attribute "n_na") 
 #>                                            test statistic df p.value  psd pairs
 #>                 Fok-Paap CL Hausman (Q1, joint)    42.692 24 0.01078 TRUE   all
 #>  Fok-Paap GMM overidentification (Q2, two-step)    49.820 24 0.00149   NA   all
 #>  p.boot
-#>    0.26
-#>    0.02
+#>  0.0075
+#>  0.0170
 attr(bf, "flag_reasons")
 #> The data are quasi-completely separated (see separation()) 
-#>                                                         10
+#>                                                         47
 attr(bf, "p.boot_unflagged")
-#> [1] 0.075 0.025
+#> [1] 0.008498584 0.016997167
 ```
 
-Calibrated, \(Q_2\) still rejects: none of the 49 replicate statistics
-reaches the observed one, so `p.boot` is 0.02, the smallest value 49
-replicates can give. For \(Q_1\) the overall `p.boot` of 0.26 hides where the
-exceedances come from. The ten flagged replicates are simulated samples in
-which the nonresponse equation separates on `voted2004`, the same mechanism as
-in the Small-Hsiao splits above, and every one of them exceeds the observed
-\(Q_1\), while only two of the 39 unflagged replicates do. The observed data
-do not separate. Over the unflagged replicates \(Q_1\)'s bootstrap p-value is
-0.075 and \(Q_2\)'s 0.025, but that is a p-value conditional on samples that do
-not separate, whose size has not been studied; `p.boot` remains the
-calibrated one. On these data \(Q_2\) is the decisive Fok-Paap test.
-\(Q_1\)'s calibrated p-value is 0.26; leaving out the separated replicates
-gives 0.075, a figure whose size has not been studied.
+Calibrated, both Fok-Paap tests still reject. Two of the 399 replicate
+statistics reach the observed \(Q_1\), so its `p.boot` is 0.0075. The 47
+flagged replicates are simulated samples in which the nonresponse equation
+separates on `voted2004`, the same mechanism as in the Small-Hsiao splits
+above: its intercept falls and its `voted2004` coefficient rises without
+bound, their sum staying finite. Along that one direction neither estimator
+has an estimate, so \(Q_1\) leaves it out and compares the two estimators
+on the other 23, and \(Q_2\) is not computed in those samples (`?fp_tests`).
+Five of the other 352 replicate statistics reach the observed \(Q_2\), and
+its `p.boot` is 0.017. The observed data do not separate, and over the
+unflagged replicates the two p-values are 0.0085 and 0.017.
 
 ## The score test against a nested logit
 

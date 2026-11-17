@@ -25,7 +25,7 @@ test_that("Wald and score tests on a singular information report it instead of f
   m <- suppressWarnings(mnl(y ~ x1 + x2 + g, data = d))
   ## separated coefficients pushed until their probabilities underflow: no information
   m2 <- m; m2$theta[grep("^c:g", names(m$theta))] <- -60
-  expect_error(suppressWarnings(captivity_test(m2)), "information matrix of the logit fit is singular")   # after its separation warning (DESIGN.md Phase 4d)
+  expect_error(suppressWarnings(captivity_test(m2)), "information matrix of the multinomial logit fit is singular")   # after its separation warning (DESIGN.md Phase 4d)
   ## a rank-deficient covariance block: the term's Wald statistic is NA, the others stand
   m3 <- m; jj <- grep(":g", names(m$theta)); m3$vcov_internal[jj, jj] <- 1
   expect_warning(tt <- term_test(m3), "covariance of the coefficients of g is singular")
@@ -102,6 +102,56 @@ test_that("the IIA battery warns once when the fit is separated (F8)", {
   r <- withCallingHandlers(iia_tests(m, splits = 2, seed = 1), warning = function(x) { w <<- c(w, conditionMessage(x)); invokeRestart("muffleWarning") })
   expect_equal(sum(grepl("diverging coefficients", w)), 1L)
   expect_true(any(grepl("c:gv", w)))
+})
+
+test_that("Q1 leaves the diverging directions out of its comparison, wherever the fit stopped", {
+  ## the separated design of the test above: no case with g = v or w chooses c,
+  ## so c:gv and c:gw each run off on their own (two directions)
+  set.seed(3)
+  d <- rmnl(600, beta = cbind(b = c(0.5, -1, 0.8), c = c(-0.3, 0.6, -0.5)))
+  d$g <- factor(sample(c("u", "v", "w"), 600, replace = TRUE))
+  d$y[d$g != "u" & d$y == "c"] <- "a"
+  m <- suppressWarnings(mnl(y ~ x1 + x2 + g, data = d)); K <- length(coef(m))
+  expect_warning(f <- fp_tests(m, tests = "cl"), "Q1 leaves the diverging directions out of its comparison")
+  det <- attr(f, "details")
+  expect_setequal(det$q1_left_out, c("c:gv", "c:gw")); expect_identical(det$q1_left_out_rank, 2L)
+  expect_identical(as.integer(f$df), K - 2L)
+  i <- match(det$q1_left_out, names(m$theta)); expect_false(anyNA(i))
+  expect_lt(max(abs(det$vcov_cl[i, ])), 1e-8)                      # no variance along the directions left out
+  expect_equal(unname(det$theta_cl[i]), unname(m$theta[i]))          # the estimator kept the fit's values there
+  expect_output(print(f), "Q1 leaves 2 diverging directions out of its comparison")
+  ## the statistic does not depend on how far out the optimizer stopped
+  for (s in c(4, 10)) {
+    m2 <- m; m2$theta[i] <- m2$theta[i] + s * sign(m2$theta[i])
+    f2 <- suppressWarnings(fp_tests(m2, tests = "cl"))
+    expect_equal(f2$statistic, f$statistic, tolerance = 1e-3); expect_identical(f2$df, f$df)
+  }
+  expect_lt(f$statistic, 10 * f$df)                                  # not the statistic of a comparison through them (hundreds or more)
+  ## a regular fit is compared on every coefficient
+  m0 <- mnl(y ~ x1 + x2, data = d); f0 <- fp_tests(m0, tests = "cl")
+  expect_null(attr(f0, "details")$q1_left_out); expect_identical(as.integer(f0$df), length(coef(m0)))
+})
+
+test_that("a separated reference cell is one direction: Q1 keeps the estimable sum", {
+  ## no case with g = u (the reference level) chooses c: c's intercept falls and
+  ## c:gv, c:gw rise, their sums with the intercept staying finite
+  set.seed(5)
+  d <- rmnl(900, beta = cbind(b = c(0.5, -1, 0.8), c = c(-0.3, 0.6, -0.5)))
+  d$g <- factor(sample(c("u", "v", "w"), 900, replace = TRUE))
+  d$y[d$g == "u" & d$y == "c"] <- "a"
+  m <- suppressWarnings(mnl(y ~ x1 + x2 + g, data = d)); K <- length(coef(m))
+  f <- suppressWarnings(fp_tests(m, tests = "cl")); det <- attr(f, "details")
+  expect_setequal(det$q1_left_out, c("c:(Intercept)", "c:gv", "c:gw")); expect_identical(det$q1_left_out_rank, 1L)
+  expect_identical(as.integer(f$df), K - 1L)
+  ## moving along the diverging direction leaves the statistic where it was
+  i <- match(c("c:(Intercept)", "c:gv", "c:gw"), names(m$theta))
+  m2 <- m; m2$theta[i] <- m2$theta[i] + c(-8, 8, 8)
+  f2 <- suppressWarnings(fp_tests(m2, tests = "cl"))
+  expect_equal(f2$statistic, f$statistic, tolerance = 1e-3); expect_identical(f2$df, f$df)
+  ## the battery's table says what Q1 did
+  b <- suppressWarnings(iia_tests(m, splits = 1, seed = 1))
+  expect_identical(attr(b, "q1_left_out")$rank, 1L)
+  expect_output(print(b), "Q1 leaves 1 diverging direction out of its comparison")
 })
 
 test_that("a Wald statistic on a badly scaled covariance is computed, not refused by solve() (F10)", {

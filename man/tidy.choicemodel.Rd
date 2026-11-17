@@ -29,6 +29,25 @@ penalized-likelihood intervals for a penalized fit).
 \description{
 Tidy a choice model (broom method)
 }
+\section{Multiple imputation}{
+
+\code{mice::pool()} combines a list of fits, one per completed data set, through
+these methods: the pooled estimates and standard errors are Rubin's rules.
+Three points need care.
+\itemize{
+\item Fit the model on each completed data set yourself: \code{with(imp, mnl(...))}
+does not work, because the estimators take the data as an argument.
+\item Give \code{pool()} the complete-data degrees of freedom, \code{dfcom = nobs(fit) - length(coef(fit))}. Left to itself, mice 3.19 counts one residual per
+case and alternative, about J times too many, and its reference t
+distributions are then too narrow.
+\item The pooled statistic tests each parameter against 0 on the scale
+reported. For inclusive values, scales, and covariance parameters that is
+not the test \code{\link[=summary.choicemodel]{summary.choicemodel()}} reports. The fits' flags
+(\code{converged}, \code{boundary}, \code{singular}, \code{n_modes}) are not pooled either:
+check them on each fit first, as the example does.
+}
+}
+
 \examples{
 if (requireNamespace("broom", quietly = TRUE)) {
   set.seed(1)
@@ -37,6 +56,18 @@ if (requireNamespace("broom", quietly = TRUE)) {
   broom::tidy(m, conf.int = TRUE)
   broom::glance(m)
   head(broom::augment(m))
+}
+\donttest{
+## multiple imputation: one fit per completed data set, pooled by mice
+if (requireNamespace("mice", quietly = TRUE)) {
+  set.seed(1)
+  d <- rmnl(500, beta = cbind(b = c(0.5, -1, 0.8), c = c(-0.3, 0.6, -0.5)))
+  d$x1[sample(500, 80)] <- NA
+  imp <- mice::mice(d, m = 5, printFlag = FALSE, seed = 1)
+  fits <- lapply(1:5, function(i) mnl(y ~ x1 + x2, data = mice::complete(imp, i)))
+  all(vapply(fits, function(f) f$converged && !f$boundary && !f$singular, logical(1)))
+  summary(mice::pool(fits, dfcom = nobs(fits[[1]]) - length(coef(fits[[1]]))))
+}
 }
 }
 \seealso{

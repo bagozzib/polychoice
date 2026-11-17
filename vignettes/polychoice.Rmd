@@ -387,8 +387,39 @@ head(broom::tidy(m, conf.int = TRUE), 4)
 #> 3   outcome -0.4166601  0.3309740
 #> 4   outcome  0.4837556  1.0534108
 broom::glance(m)
-#>      logLik     AIC      BIC df nobs converged boundary ill_conditioned n_modes
-#> 1 -2125.695 4299.39 4433.788 24 1998      TRUE    FALSE           FALSE       1
+#>      logLik     AIC      BIC df nobs converged boundary ill_conditioned
+#> 1 -2125.695 4299.39 4433.788 24 1998      TRUE    FALSE           FALSE
+#>   singular n_modes
+#> 1    FALSE       1
+```
+
+With multiply imputed data, fit the model on each completed data set and
+pass the list of fits to `mice::pool()`, which combines them by Rubin's
+rules through the same methods. The estimators take the data as an
+argument, so `with(imp, mnl(...))` does not work. The fits' flags are not
+pooled, so check each fit first. And give `pool()` the complete-data
+degrees of freedom, cases minus parameters: left to itself, mice 3.19
+counts one residual per case and alternative. The pooled statistic tests
+each parameter against zero (`?tidy.choicemodel`).
+
+
+``` r
+set.seed(1)
+dm <- rmnl(500, beta = cbind(b = c(0.5, -1, 0.8), c = c(-0.3, 0.6, -0.5)))
+dm$x1[sample(500, 80)] <- NA
+imp <- mice::mice(dm, m = 5, printFlag = FALSE, seed = 1)
+fits <- lapply(1:5, function(i) mnl(y ~ x1 + x2, data = mice::complete(imp, i)))
+all(vapply(fits, function(f) f$converged && !f$boundary && !f$singular, logical(1)))
+#> [1] TRUE
+pooled <- mice::pool(fits, dfcom = nobs(fits[[1]]) - length(coef(fits[[1]])))
+summary(pooled)[, c("term", "estimate", "std.error", "statistic", "df", "p.value")]
+#>            term   estimate std.error statistic        df      p.value
+#> 1 b:(Intercept)  0.4821263 0.1232712  3.911103 475.78603 1.052452e-04
+#> 2          b:x1 -0.7073566 0.1777954 -3.978486  31.11162 3.859728e-04
+#> 3          b:x2  0.6748004 0.1309133  5.154561 441.90770 3.841501e-07
+#> 4 c:(Intercept) -0.3711618 0.1679398 -2.210088 253.25992 2.799368e-02
+#> 5          c:x1  0.9470919 0.1783153  5.311331 119.41062 5.113435e-07
+#> 6          c:x2 -0.6314056 0.1471864 -4.289837 330.41730 2.350910e-05
 ```
 
 ## Where next
@@ -397,7 +428,7 @@ broom::glance(m)
   Marchetti (2017) and reproduces the published applications.
 * *Testing IIA and specification* covers `iia_tests()` and the further tests,
   with the size study that motivates the recommendations.
-* *Beyond IIA* covers the nested logit, HEV, probit, random intercepts, and
+* *Beyond IIA* covers the nested logit, HEV, multinomial probit, random intercepts, and
   the fixed-effects tools.
 * *Seven published analyses* works through the example datasets drawn from
   replication archives (`sanctions`, `fluvax`, `bes1987`, `defection`,

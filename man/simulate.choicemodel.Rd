@@ -32,7 +32,7 @@ unavailable alternatives).
 Draws \code{nsim} outcome vectors from the fitted model (holding the covariates
 fixed): the parametric bootstrap of the model. For every family but the
 random-intercept one the draw of a case is from its fitted probabilities of
-the observed alternatives (the GHK probabilities of a probit case are
+the observed alternatives (the GHK probabilities of a multinomial probit case are
 renormalized to one); for \code{\link[=remnl]{remnl()}} one intercept vector is drawn per unit
 and the unit's cases are then drawn given it, so the within-unit dependence
 of the model is reproduced. Frequency weights are left as they are: one

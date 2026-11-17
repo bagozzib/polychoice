@@ -1,11 +1,11 @@
 ---
-title: "Beyond IIA: nested logit, HEV, probit, random intercepts, and panels"
+title: "Beyond IIA: nested logit, HEV, multinomial probit, random intercepts, and panels"
 author: "Benjamin E. Bagozzi"
 output:
   rmarkdown::html_vignette:
     toc: true
 vignette: >
-  %\VignetteIndexEntry{Beyond IIA: nested logit, HEV, probit, random intercepts, and panels}
+  %\VignetteIndexEntry{Beyond IIA: nested logit, HEV, multinomial probit, random intercepts, and panels}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---
@@ -19,7 +19,7 @@ has_aer <- requireNamespace("AER", quietly = TRUE)
 When IIA fails, or when the cases of a unit share unobserved tastes, the
 multinomial logit is the restricted member of several families that
 `polychoice` fits with the same interface. This vignette fits each of them,
-shows how to compare them with the logit, and notes where their parameters are
+shows how to compare them with the multinomial logit, and notes where their parameters are
 identified only weakly.
 
 ```{r lib}
@@ -71,7 +71,7 @@ likelihood-ratio test against the `mnl()` fit, as above.
 With case-specific covariates only (the wide layout) the inclusive-value
 parameters are identified only through the curvature of the inclusive values
 and are recovered imprecisely; alternative-specific covariates identify them
-sharply. The same holds for the HEV scales and the probit covariance below,
+sharply. The same holds for the HEV scales and the multinomial probit covariance below,
 and the package's simulators (`rnlogit()`, `rhev()`, `rmnp()`) have a `gamma`
 argument that generates such covariates in the long layout.
 
@@ -121,8 +121,8 @@ mp <- mnprobit(chosen ~ w1 | x1 + x2, data = dp, id = "id", alt = "alt")
 summary(mp)
 ```
 
-The probit does not nest the logit, so the two are compared with `vuong()`
-or the information criteria; probit coefficients are on a smaller scale
+The multinomial probit does not nest the multinomial logit, so the two are compared with `vuong()`
+or the information criteria; multinomial probit coefficients are on a smaller scale
 (the error-difference variance is 1 rather than \(\pi^2/3\)). The data were
 drawn with covariance 0.6 and variance 1.5. In this sample the variance
 estimate is close to its value, the covariance estimate about two standard
@@ -136,7 +136,7 @@ to 97 percent of the data sets. The two departures at 3,000 cases beyond
 Monte Carlo error, a slope bias of 0.010 and a coverage of 0.905, did not
 recur on 200 fresh seeds, and fits of 200,000 cases recover every value
 within two standard errors. Covariance
-parameters are the noisiest part of a probit fit even with an
+parameters are the noisiest part of a multinomial probit fit even with an
 alternative-specific covariate, and they are fragilely identified from
 case-specific covariates alone (Keane 1992): fits may then stop at a
 near-singular covariance with a warning, and the covariance estimates should
@@ -180,7 +180,7 @@ The random intercepts are independent relative to the base alternative, so
 with three or more alternatives the base is part of the model. Relative to
 another base they would be correlated, which the diagonal model does not
 represent. A fit with another `ref` is a different model, with its own
-log-likelihood and its own test against the logit (`?remnl` has an example).
+log-likelihood and its own test against the multinomial logit (`?remnl` has an example).
 The data above were simulated with alternative `a` free of a random intercept,
 and `a` is the base.
 
@@ -276,9 +276,9 @@ rbind(remnl = coef(mre2)[c("b:x1", "b:x2", "c:x1", "c:x2")],
 
 ## Choosing among the families
 
-* The logit is nested in the nested logit, the HEV, and the random-intercept
+* The multinomial logit is nested in the nested logit, the HEV, and the random-intercept
   model: use `lr_test()` (with the boundary caveat for the random intercepts).
-* The probit is not nested with any of them: use `vuong()` or
+* The multinomial probit is not nested with any of them: use `vuong()` or
   `compare_models()`.
 * `compare_models()` lines up log-likelihoods, degrees of freedom, and
   information criteria for any set of fits to the same cases.

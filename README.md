@@ -3,9 +3,10 @@
 Multinomial choice models, the inflated multinomial logit, and tests of the
 independence of irrelevant alternatives (IIA), for R.
 
-**Status: development version, not yet released.** See `DESIGN.md` in the repository for the
-scope, the parameterisation, the fixed definitions of every test, and the
-verification protocol.
+**Status: version 0.1.0.** `DESIGN.md` in the
+[repository](https://github.com/bagozzib/polychoice) gives the scope, the
+parameterisation, the fixed definitions of every test, and the verification
+protocol.
 
 ## What it does
 
@@ -95,14 +96,36 @@ boot_lr_test(m0, m1, B = 99, cores = 4)   # calibrated (the multinomial logit is
 iia_tests(m0, seed = 1)
 ```
 
-## Installation (development)
+## Installation
 
 ```r
-# from the package directory
-install.packages(".", repos = NULL, type = "source")
+# install.packages("remotes")
+remotes::install_github("bagozzib/polychoice")
 ```
 
-Requires a C++ compiler (Rtools on Windows).
+Installing from source requires a C++ compiler (Rtools on Windows).
+
+## Documentation
+
+Every function has a help page with examples (`help(package = "polychoice")`),
+and five vignettes cover the package:
+
+* `vignette("polychoice")`: getting started (data layouts, fitting,
+  quantities of interest, model comparison).
+* `vignette("iia")`: testing IIA and specification, with the definition of
+  each test and its bootstrap calibration.
+* `vignette("inflation")`: the inflated multinomial logit, its several
+  maxima, captive alternatives, and the tests against the multinomial logit.
+* `vignette("beyond")`: nested logit, HEV, multinomial probit, random
+  intercepts, and fixed-effects panels.
+* `vignette("applications")`: seven published analyses reproduced from the
+  bundled data.
+
+The repository also holds `DESIGN.md` and, under `verification/`, the Monte
+Carlo scripts, their run records on the release build, and a ledger of the
+results the documentation cites.
+
+Questions and bug reports: <https://github.com/bagozzib/polychoice/issues>.
 
 ## Citation and licence
 

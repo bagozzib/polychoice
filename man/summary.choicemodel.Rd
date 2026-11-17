@@ -17,7 +17,7 @@ table (\code{coefficients}: estimate, standard error, z, p), the parameter
 \code{block} of every row (\code{"outcome"}, \code{"generic"}, \code{"fixed effect"},
 \code{"inflation"}, \code{"nest"}, \code{"scale"}, \code{"covariance"}, \code{"random intercept"}),
 and the fit statistics. The z statistics of the inclusive-value and scale
-blocks test the value 1 (the multinomial logit); those of the probit
+blocks test the value 1 (the multinomial logit); those of the multinomial probit
 covariance block test the values under independent, identically
 distributed errors (variances 1, covariances 0.5 under the normalization
 of the first variance to 1); the random-intercept

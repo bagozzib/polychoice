@@ -27,11 +27,11 @@ multiplies the odds of the choice regime (logit link only).
 \details{
 The odds reading holds for the multinomial logit, the inflated multinomial logit (whose
 outcome stage is a multinomial logit within the choice regime), and the
-random-intercept logit, where it is conditional on the unit's intercepts
+random-intercept multinomial logit, where it is conditional on the unit's intercepts
 (the population-averaged odds ratio is closer to one). It does not hold for
 the nested logit (within a nest the ratio is \eqn{e^{\beta/\lambda}}, across
 nests it is not constant), the HEV model (the odds depend on the scales), or
-the probit, so \code{rrr()} refuses those fits: use \code{\link[=first_difference]{first_difference()}}.
+the multinomial probit, so \code{rrr()} refuses those fits: use \code{\link[=first_difference]{first_difference()}}.
 }
 \examples{
 set.seed(1)

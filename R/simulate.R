@@ -3,7 +3,7 @@
 ## inflated), nested logit, multinomial probit, HEV. Wide layout by default;
 ## with `gamma` (generic coefficients on alternative-specific covariates) the
 ## data come in the long layout, which is where the structural parameters of
-## the nested logit, HEV, and probit are well identified (case-specific
+## the nested logit, HEV, and multinomial probit are well identified (case-specific
 ## covariates identify them only through the functional form; ledger).
 ## ---------------------------------------------------------------------------
 

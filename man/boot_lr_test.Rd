@@ -52,11 +52,11 @@ calibrated comparison for restrictions on the boundary of the parameter
 space, where neither the chi-square reference of \code{\link[=lr_test]{lr_test()}} nor the normal
 reference of \code{\link[=vuong]{vuong()}} holds: the inflated model against the multinomial
 logit (\eqn{\phi = 1}, where the split coefficients are not identified),
-the random-intercept model against the logit (\eqn{\sigma = 0}). It applies
+the random-intercept model against the multinomial logit (\eqn{\sigma = 0}). It applies
 to the pairs \code{\link[=lr_test]{lr_test()}} accepts (a subset of the parameters within one
-family, with the nest structure shared for the nested logit, or the logit
+family, with the nest structure shared for the nested logit, or the multinomial logit
 with the same covariates inside a nested logit, an HEV, or a
-random-intercept fit), to the logit inside the inflated multinomial logit,
+random-intercept fit), to the multinomial logit inside the inflated multinomial logit,
 and to an inflated multinomial logit inside one with more inflated
 alternatives; and to two nested \code{\link[=rologit]{rologit()}} fits of the same rankings,
 where few rankings per coefficient make the chi-square reference of

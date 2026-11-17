@@ -76,8 +76,21 @@
   ## both zero up to rounding, and judged against its own largest eigenvalue
   ## that rounding would pass for information. Such directions are dropped
   ## (degrees of freedom reduced); with none left the test is undefined (NA)
-  if (!is.null(ref) && length(ref) == length(delta) && all(is.finite(ref) & ref > 0)) {
-    sr <- sqrt(ref); delta <- delta / sr; Vd <- Vd / tcrossprod(sr)
+  ## `ref` can be that covariance itself: the contrast is then whitened by its
+  ## Cholesky factor, and the eigenvalues, the directions dropped and the
+  ## statistic are the same under any linear reparametrization of the model
+  ## (a covariate's units, its centering, a factor's reference level), which
+  ## scaling by the standard deviations alone is not
+  white <- NULL
+  if (is.matrix(ref) && nrow(ref) == length(delta) && all(is.finite(ref))) {
+    Rc <- tryCatch(chol((ref + t(ref)) / 2), error = function(e) { .pc_pass_limit(e); NULL })
+    if (!is.null(Rc)) white <- list(delta = backsolve(Rc, delta, transpose = TRUE), Vd = backsolve(Rc, t(backsolve(Rc, Vd, transpose = TRUE)), transpose = TRUE))
+    ref <- diag(ref)
+  }
+  if (!is.null(white) && all(is.finite(white$delta)) && all(is.finite(white$Vd)) ||
+      !is.null(ref) && length(ref) == length(delta) && all(is.finite(ref) & ref > 0)) {
+    if (!is.null(white) && all(is.finite(white$delta)) && all(is.finite(white$Vd))) { delta <- white$delta; Vd <- white$Vd }
+    else { sr <- sqrt(ref); delta <- delta / sr; Vd <- Vd / tcrossprod(sr) }
     es <- eigen((Vd + t(Vd)) / 2, symmetric = TRUE)
     keep <- abs(es$values) > sqrt(.Machine$double.eps)
     psd0 <- all(es$values >= -sqrt(.Machine$double.eps))
@@ -89,13 +102,15 @@
   }
   ev <- eigen((Vd + t(Vd)) / 2, symmetric = TRUE, only.values = TRUE)$values
   psd <- all(ev >= -sqrt(.Machine$double.eps) * max(abs(ev), 1))
-  inv <- tryCatch(solve(Vd), error = function(e) { .pc_pass_limit(e); NULL })
-  ginv_used <- is.null(inv)
-  if (ginv_used) inv <- MASS::ginv(Vd)
-  ## with a generalized inverse the statistic lives in the column space of Vd:
-  ## its degrees of freedom are the rank (a cluster sandwich with fewer
+  ## singular by the rule of .pc_inverse() (the reciprocal condition number of
+  ## the normalized matrix below .pc_singular_tol, the same on every platform):
+  ## a generalized inverse that drops the directions below sqrt(eps) of the
+  ## largest, and the statistic then lives in the column space of Vd, with
+  ## its rank as the degrees of freedom (a cluster sandwich with fewer
   ## clusters than parameters has rank below the dimension)
-  rk <- if (ginv_used) sum(abs(ev) > sqrt(.Machine$double.eps) * max(abs(ev), 1e-300)) else length(delta)
+  iv <- .pc_inverse(Vd, gtol = sqrt(.Machine$double.eps))
+  inv <- iv$inv; ginv_used <- iv$ginv
+  rk <- if (ginv_used) iv$rank else length(delta)
   list(stat = as.numeric(t(delta) %*% inv %*% delta), psd = psd, ginv = ginv_used, df = rk, degenerate = FALSE)
 }
 ## the IIA contrasts compare estimators of the same coefficients; a coefficient
@@ -108,6 +123,23 @@
   nm <- object$design$par_names[dv %in% TRUE]
   if (length(nm)) warning(what, ": the fit has diverging coefficients (", paste(utils::head(nm, 6), collapse = ", "), if (length(nm) > 6) ", ..." else "",
                           "; quasi-complete separation), ", why, ".", call. = FALSE)
+}
+## The diverging directions of a fit, for a test that leaves them out: an
+## orthonormal basis N of their span and the coefficients that move along
+## them, or NULL when nothing diverges. Within the scope of the exact check
+## the span is that of the cone of separating directions (.pc_separation());
+## outside it, the coordinates of the coefficients the size-and-Wald rule flags.
+## A separated reference cell is one direction through several coefficients
+## (an intercept falling and a dummy rising, their sum estimable): only that
+## direction is left out, not the coefficients.
+.pc_diverging_span <- function(theta, D, scale) {
+  if (.pc_sep_scope(D)) {
+    s <- tryCatch(.pc_separation(D, theta), error = function(e) { .pc_pass_limit(e); NULL })
+    if (!is.null(s)) return(if (isTRUE(s$separated) && !is.null(s$span) && ncol(s$span) > 0L) list(N = s$span, terms = s$terms) else NULL)
+  }
+  dv <- tryCatch(.pc_diverge(theta, D, scale, se = .pc_info_se(theta, D, scale)), error = function(e) { .pc_pass_limit(e); NULL })
+  dv <- length(dv) == D$K & dv %in% TRUE
+  if (any(dv)) list(N = diag(D$K)[, dv, drop = FALSE], terms = D$par_names[dv]) else NULL
 }
 ## the score tests' form of the warning
 .pc_score_sep_why <- "so the score statistic is evaluated where the optimizer stopped, at estimates that do not exist, and its value depends on that point (fitted probabilities near zero weigh heavily); drop or merge the separating terms first"
@@ -393,12 +425,21 @@ small_hsiao <- function(object, drop = NULL, splits = 1L, seed = NULL) {
 ## both alternatives available and y in {j, m}, the difference design
 ## Delta = D_j - D_m (so V_j - V_m = Delta' theta + o_j - o_m), the binary
 ## outcome 1{y = j}, and the instruments zeta = (x, w_j - w_m)
+##
+## The instruments are put on a canonical scale (DESIGN.md Phase 4g): x is
+## replaced by sqrt(n) Q of its QR decomposition over all cases, and the
+## differences w_j - w_m by the same for their rows stacked over the pairs.
+## The moment conditions are the same ones (a fixed invertible transformation
+## of each pair's block), and Q does not change when a covariate is rescaled
+## or, with the constant first, centered, so neither do the moment covariance,
+## its condition number, the directions a generalized inverse drops, and Q2.
+## A design matrix that qr() finds rank-deficient is left as it is.
 .pc_pairs <- function(D, pairs) {
   J <- D$J; n <- D$n; p <- D$p; q <- D$q; K <- p * (J - 1L) + q
   nonbase <- setdiff(seq_len(J), D$base)
   blk <- function(j) if (j == D$base || p == 0L) integer(0) else (match(j, nonbase) - 1L) * p + seq_len(p)
   pl <- if (pairs == "base") lapply(setdiff(seq_len(J), D$base), function(j) c(j, D$base)) else utils::combn(J, 2L, simplify = FALSE)
-  lapply(pl, function(pr) {
+  P <- lapply(pl, function(pr) {
     j <- pr[1L]; m <- pr[2L]
     cases <- which(D$avail[, j] == 1L & D$avail[, m] == 1L & (D$y == j | D$y == m))
     nc <- length(cases)
@@ -409,31 +450,74 @@ small_hsiao <- function(object, drop = NULL, splits = 1L, seed = NULL) {
     list(j = j, m = m, cases = cases, Delta = Delta, odiff = D$off[cases, j] - D$off[cases, m],
          yj = as.numeric(D$y[cases] == j), zeta = cbind(D$X[cases, , drop = FALSE], Wd), w = D$w[cases])
   })
+  ## the columns are first scaled to unit length, so that the decomposition
+  ## is as accurate in the data's units as in any other
+  canon <- function(Z) {
+    if (!ncol(Z) || nrow(Z) < ncol(Z)) return(NULL)
+    cs <- sqrt(colSums(Z^2))
+    if (!all(is.finite(cs)) || any(cs == 0)) return(NULL)
+    qrz <- qr(Z / rep(cs, each = nrow(Z)), tol = 1e-13)        # the design has passed the fit's identification check
+    if (qrz$rank < ncol(Z)) return(NULL)
+    Ri <- tryCatch(backsolve(qr.R(qrz), diag(ncol(Z))), error = function(e) { .pc_pass_limit(e); NULL })
+    if (is.null(Ri) || !all(is.finite(Ri))) NULL else (Ri / cs) * sqrt(nrow(Z))
+  }
+  Tx <- if (p) canon(D$X) else NULL
+  Tw <- if (q) canon(do.call(rbind, lapply(P, function(pr) pr$zeta[, p + seq_len(q), drop = FALSE]))) else NULL
+  lapply(P, function(pr) {
+    if (!is.null(Tx)) pr$zeta[, seq_len(p)] <- pr$zeta[, seq_len(p), drop = FALSE] %*% Tx
+    if (!is.null(Tw)) pr$zeta[, p + seq_len(q)] <- pr$zeta[, p + seq_len(q), drop = FALSE] %*% Tw
+    pr
+  })
 }
 
 ## composite-likelihood estimator over the pairs by Newton (the pairwise logit
 ## log-likelihood is concave); returns the estimate, the sensitivity H (sum of
 ## weighted Lambda(1-Lambda) Delta Delta'), and the per-case summed scores
-.pc_cl_fit <- function(P, theta0, n, K) {
+.pc_cl_fit <- function(P, theta0, n, K, B = NULL) {
   theta <- theta0
-  for (it in seq_len(50L)) {
-    g <- numeric(K); H <- matrix(0, K, K)
+  ## the composite log-likelihood, its gradient and its sensitivity at theta
+  at <- function(theta) {
+    ll <- 0; g <- numeric(K); H <- matrix(0, K, K)
     for (pr in P) {
       eta <- as.vector(pr$Delta %*% theta) + pr$odiff; lam <- stats::plogis(eta)
+      ll <- ll + sum(pr$w * (pr$yj * stats::plogis(eta, log.p = TRUE) + (1 - pr$yj) * stats::plogis(-eta, log.p = TRUE)))
       g <- g + colSums(pr$w * (pr$yj - lam) * pr$Delta)
       H <- H + crossprod(pr$Delta * sqrt(pr$w * lam * (1 - lam)))
     }
-    step <- tryCatch(solve(H, g), error = function(e) { .pc_pass_limit(e); MASS::ginv(H) %*% g })
-    theta <- theta + as.vector(step)
-    if (max(abs(step)) < 1e-10) break
+    list(ll = ll, g = g, H = H)
   }
-  S <- matrix(0, n, K); H <- matrix(0, K, K)
+  ## Newton over every coefficient, or, for a fit with diverging directions,
+  ## over the coordinates of a basis B of the other directions: theta moves
+  ## in the span of B and keeps theta0's component along the rest (fp_tests()).
+  ## A step is halved until the composite log-likelihood does not fall (it is
+  ## concave, but a full step from a point with fitted probabilities near 0
+  ## or 1 can overshoot by orders of magnitude). The fit has failed, and Q1
+  ## is not computed, when the sensitivity is singular in the coordinates of
+  ## the search (the pairwise likelihoods do not identify them: more
+  ## directions diverge than the ones left out) or an iterate is not finite;
+  ## it has converged when a full step is taken from a Newton decrement g' H^-1 g below 1e-8
+  cur <- at(theta); failed <- FALSE; done <- FALSE
+  for (it in seq_len(100L)) {
+    Hb <- if (is.null(B)) cur$H else crossprod(B, cur$H %*% B); gb <- if (is.null(B)) cur$g else as.vector(crossprod(B, cur$g))
+    iv <- .pc_inverse(Hb)
+    if (isTRUE(iv$ginv) || !all(is.finite(iv$inv))) { failed <- TRUE; break }
+    step <- as.vector(iv$inv %*% gb); dec <- sum(gb * step)
+    if (!all(is.finite(step))) { failed <- TRUE; break }
+    for (h in 0:30) {
+      tn <- theta + (if (is.null(B)) step else as.vector(B %*% step)) / 2^h
+      nx <- at(tn)
+      if (is.finite(nx$ll) && nx$ll >= cur$ll - 1e-10 * max(1, abs(cur$ll))) break
+    }
+    if (!is.finite(nx$ll) || nx$ll < cur$ll - 1e-10 * max(1, abs(cur$ll))) break
+    theta <- tn; cur <- nx
+    if (dec < 1e-8 && h == 0L) { done <- TRUE; break }               # the full step from a decrement below 1e-8 is taken, then the search ends
+  }
+  S <- matrix(0, n, K)
   for (pr in P) {
     eta <- as.vector(pr$Delta %*% theta) + pr$odiff; lam <- stats::plogis(eta)
     S[pr$cases, ] <- S[pr$cases, ] + (pr$yj - lam) * pr$Delta
-    H <- H + crossprod(pr$Delta * sqrt(pr$w * lam * (1 - lam)))
   }
-  list(theta = theta, H = H, scores = S, converged = it < 50L)
+  list(theta = theta, H = cur$H, scores = S, converged = !failed && done, failed = failed || !all(is.finite(theta)))
 }
 
 ## per-case moment matrix (n x M) and the Jacobian of the mean moment (M x K)
@@ -507,12 +591,47 @@ small_hsiao <- function(object, drop = NULL, splits = 1L, seed = NULL) {
 #' covariates only, the overidentifying restrictions carry information only
 #' through the covariates (Fok and Paap 2025, Section 2.2): with few or weak
 #' covariates the moment covariance is near singular and the test has little
-#' power; its reciprocal condition number is reported.
+#' power; its reciprocal condition number is reported. Where the moments are
+#' linearly dependent (one binary covariate, say) the moment covariance is
+#' singular: the statistic is then computed on its generalized inverse, its
+#' degrees of freedom are the rank of the moment covariance minus the number
+#' of parameters, and a warning says so.
+#'
+#' **Units of the covariates.** Where they are computed, neither statistic depends on the units of the
+#' covariates, on their centering, or on a factor's reference level. The
+#' instruments of \eqn{Q_2} are put on a canonical scale before the moments
+#' are formed, and the contrast of \eqn{Q_1} is whitened by the covariance
+#' of the maximum-likelihood estimator, so that the directions a generalized
+#' inverse drops are the same in any parametrization.
+#'
+#' **When the tests are not computed.** Both tests compare estimators at the
+#' fit. Where the fit's information matrix is ill-conditioned on the
+#' directions compared (reciprocal condition number of its normalized form
+#' below 1e-9, the rule of the fit's `ill_conditioned` flag), the estimates
+#' are determined to few digits along some direction and the statistics
+#' would depend on where the optimizer stopped: both are `NA`, with a
+#' warning. That condition number does not depend on the covariates' units,
+#' but a covariate far from its origin (a calendar year) is nearly collinear
+#' with the constant and can bring it below the bound; centering it helps.
+#' \eqn{Q_1} is also `NA` when the composite-likelihood estimator
+#' does not exist (its sensitivity matrix is singular).
 #'
 #' @param object A fitted [mnl()] model with at least three alternatives.
-#'   A fit with diverging coefficients (separation) draws a warning: the
-#'   contrasts then compare estimates that do not exist and can reject
-#'   spuriously.
+#'   A fit with diverging coefficients (separation) draws a warning. Along a
+#'   diverging direction neither estimator has an estimate, so \eqn{Q_1}
+#'   leaves those directions out: the composite-likelihood estimator keeps
+#'   the fit's values along them, the two estimators are compared on the
+#'   other directions, and the degrees of freedom are reduced by their
+#'   number (`attr(, "details")$q1_left_out` names the coefficients that move
+#'   along them and `$q1_left_out_rank` counts the directions; a separated
+#'   reference cell is one direction through an intercept and a dummy, whose
+#'   sum stays in the comparison). The statistic then does not depend on
+#'   where the optimizer stopped. \eqn{Q_2} is not computed (`NA`): its
+#'   moment conditions have no finite solution along a diverging direction,
+#'   and the moments at the point where the optimizer stopped depend on that
+#'   point.
+#'   In [boot_pvalue()] a replicate that separates has fewer degrees of
+#'   freedom than the observed statistic it is compared with.
 #' @param pairs `"all"` (default) or `"base"`.
 #' @param tests Which tests to compute: `"cl"`, `"gmm"`, or both (default).
 #' @param gmm `"two-step"` (default), `"iterated"`, or `"projected"`; see Details.
@@ -522,7 +641,9 @@ small_hsiao <- function(object, drop = NULL, splits = 1L, seed = NULL) {
 #' @return A data frame of class `"iia_test"` with one row per test:
 #'   `test`, `statistic`, `df`, `p.value`, `psd`, and `pairs`. The attribute
 #'   `"details"` holds the CL and GMM estimates and the reciprocal condition
-#'   number of the moment covariance.
+#'   number of the moment covariance; on a separated fit also `q1_left_out` and
+#'   `q1_left_out_rank`, and `theta_cl` then equals the fit along the directions
+#'   left out, where `vcov_cl` has no variance.
 #' @references
 #' Fok, D. and Paap, R. (2025). New misspecification tests for multinomial
 #' logit models. \emph{Journal of Choice Modelling}, 54, 100531.
@@ -548,36 +669,115 @@ fp_tests <- function(object, pairs = c("all", "base"), tests = c("cl", "gmm"), g
                      vcov = c("joint", "difference"), maxit = 50L) {
   .pc_check_mnl(object, "The Fok-Paap tests")
   .pc_no_firth(object, "The Fok-Paap tests")
-  .pc_separation_warning(object, "The Fok-Paap tests")
+  .pc_separation_warning(object, "The Fok-Paap tests", why = paste0("along which there are no estimates. ", if ("cl" %in% match.arg(tests, c("cl", "gmm"), several.ok = TRUE)) "Q1 leaves the diverging directions out of its comparison of the two estimators, with its degrees of freedom reduced. " else "", if ("gmm" %in% match.arg(tests, c("cl", "gmm"), several.ok = TRUE)) "Q2 is not computed (NA): its moment conditions have no finite solution along them. " else "", "Drop or merge the separating terms to test IIA on every coefficient"))
   pairs <- match.arg(pairs); gmm <- match.arg(gmm); vcov <- match.arg(vcov)
   tests <- match.arg(tests, several.ok = TRUE)
   D <- object$design
   n <- D$n; K <- D$K
   fn <- .pc_fns(D)
   theta_ml <- object$theta
+  sp <- .pc_diverging_span(theta_ml, D, object$scale)
+  if (!isTRUE(object$converged)) warning("The fit did not converge: the Fok-Paap tests compare other estimators with it, and their statistics depend on where the optimizer stopped.", call. = FALSE)
   V_ml <- .pc_strip_vcov(.pc_vcov(theta_ml, fn, "analytic", NULL, object$scale, D$w))
   P <- .pc_pairs(D, pairs)
   if (any(vapply(P, function(pr) length(pr$cases), integer(1)) < 2L)) stop("Some pair of alternatives has fewer than two cases; the pairwise tests are not computable.", call. = FALSE)
   rows <- list(); details <- list(pairs = pairs)
+  ## Both tests compare estimators at the fit, and neither is computed when the
+  ## fit's information matrix is ill-conditioned on the directions compared
+  ## (reciprocal condition number of its normalized form below 1e-9, the rule
+  ## of the fit's `ill_conditioned` flag): the estimate is then determined to
+  ## few digits along some direction, the composite-likelihood and GMM
+  ## estimates inherit that, and the statistics depend on where the search
+  ## stopped (on the stress batteries they changed by orders of magnitude with
+  ## the units of the covariates; DESIGN.md Phase 4g)
+  Hml <- fn$hess(theta_ml)
+  if (!is.null(sp) && ncol(sp$N) < K) { Bc <- qr.Q(qr(sp$N * object$scale), complete = TRUE)[, (ncol(sp$N) + 1L):K, drop = FALSE] / object$scale; Hml <- crossprod(Bc, Hml %*% Bc) }
+  rc_info <- if (!is.null(sp) && ncol(sp$N) >= K) NA_real_ else tryCatch(rcond(Hml / tcrossprod(.pc_unit_diag(Hml))), error = function(e) { .pc_pass_limit(e); 0 })
+  details$info_rcond <- rc_info
+  if (is.finite(rc_info) && rc_info < 1e-9) {
+    warning("The Fok-Paap tests are not computed (NA): the fit's information matrix is ill-conditioned (reciprocal condition number ", format(rc_info, digits = 2),
+            if (!is.null(sp)) " on the directions that do not diverge" else "", "), so the estimates the tests compare are not determined well enough.", call. = FALSE)
+    lab <- c(cl = paste0("Fok-Paap CL Hausman (Q1, ", vcov, ")"), gmm = paste0("Fok-Paap GMM overidentification (Q2, ", gmm, ")"))
+    out <- data.frame(test = unname(lab[intersect(c("cl", "gmm"), tests)]), statistic = NA_real_, df = 0L, p.value = NA_real_, psd = NA, pairs = pairs, stringsAsFactors = FALSE)
+    attr(out, "method") <- paste0("Fok-Paap (2025) misspecification tests, ", pairs, " pairs"); attr(out, "details") <- details
+    class(out) <- c("iia_test", "data.frame")
+    return(out)
+  }
   if ("cl" %in% tests) {
-    cl <- .pc_cl_fit(P, theta_ml, n, K)
-    Jm <- crossprod(cl$scores * sqrt(D$w))
-    Hinv <- tryCatch(solve(cl$H), error = function(e) { .pc_pass_limit(e); MASS::ginv(cl$H) })
-    V_cl <- Hinv %*% Jm %*% Hinv
-    Vd <- if (vcov == "difference") V_cl - V_ml else {
-      ## the covariance of theta_ML - theta_CL from the stacked influence
-      ## functions of the two estimators: positive semi-definite by construction
-      Psi <- fn$scores(theta_ml) %*% V_ml - cl$scores %*% Hinv
-      crossprod(if (!is.null(D$cluster)) as.matrix(rowsum(Psi * D$w, D$cluster)) else Psi * sqrt(D$w))
+    if (is.null(sp)) {
+      cl <- .pc_cl_fit(P, theta_ml, n, K)
+      Jm <- crossprod(cl$scores * sqrt(D$w))
+      Hinv <- .pc_inverse(cl$H)$inv
+      V_cl <- Hinv %*% Jm %*% Hinv
+      Vd <- if (vcov == "difference") V_cl - V_ml else {
+        ## the covariance of theta_ML - theta_CL from the stacked influence
+        ## functions of the two estimators: positive semi-definite by construction
+        Psi <- fn$scores(theta_ml) %*% V_ml - cl$scores %*% Hinv
+        crossprod(if (!is.null(D$cluster)) as.matrix(rowsum(Psi * D$w, D$cluster)) else Psi * sqrt(D$w))
+      }
+      qf <- .pc_quad_form(theta_ml - cl$theta, Vd, ref = V_ml)
+    } else {
+      ## a fit with diverging directions (separation): along them neither
+      ## estimator has an estimate, so Q1 compares the two on the other
+      ## directions. With B an orthonormal basis of those, the composite-
+      ## likelihood estimator moves in the span of B from the ML fit, both
+      ## covariances are the inverses of the two information matrices in B's
+      ## coordinates, and the contrast is B'(theta_ML - theta_CL). Left in, the
+      ## comparison depends on how each inversion treats a direction without
+      ## information: on bootstrap samples of pa2006 the statistic was 18 with
+      ## that direction kept in both covariances or dropped from both, and
+      ## above 1,000 with it dropped from one (DESIGN.md, the tests of IIA)
+      N <- sp$N; r <- ncol(N)
+      details$q1_left_out <- sp$terms; details$q1_left_out_rank <- r
+      if (r >= K) {
+        ## every direction diverges: nothing to compare
+        cl <- list(theta = theta_ml, converged = TRUE); V_cl <- matrix(NA_real_, K, K)
+        qf <- list(stat = NA_real_, psd = NA, ginv = TRUE, df = 0L, degenerate = TRUE)
+      } else {
+        ## the other directions: the complement of the diverging ones in the
+        ## standardized coordinates theta * scale, where orthogonality does not
+        ## depend on the covariates' units (Bs orthonormal there; B = Bs / scale
+        ## maps its coordinates to theta)
+        Bs <- qr.Q(qr(N * object$scale), complete = TRUE)[, (r + 1L):K, drop = FALSE]
+        B <- Bs / object$scale
+        cl <- .pc_cl_fit(P, theta_ml, n, K, B = B)
+        V_b <- .pc_inverse(crossprod(B, fn$hess(theta_ml) %*% B))$inv
+        Hinv_b <- .pc_inverse(crossprod(B, cl$H %*% B))$inv
+        S_cl <- cl$scores %*% B
+        Vcl_b <- Hinv_b %*% crossprod(S_cl * sqrt(D$w)) %*% Hinv_b
+        Vd <- if (vcov == "difference") Vcl_b - V_b else {
+          Psi <- (fn$scores(theta_ml) %*% B) %*% V_b - S_cl %*% Hinv_b
+          crossprod(if (!is.null(D$cluster)) as.matrix(rowsum(Psi * D$w, D$cluster)) else Psi * sqrt(D$w))
+        }
+        qf <- .pc_quad_form(as.vector(crossprod(Bs, (theta_ml - cl$theta) * object$scale)), Vd, ref = V_b)
+        V_cl <- B %*% Vcl_b %*% t(B)                               # singular: no variance along the directions left out
+      }
     }
-    qf <- .pc_quad_form(theta_ml - cl$theta, Vd, ref = diag(V_ml))
-    if (isTRUE(qf$degenerate)) .pc_degenerate_warning("The composite-likelihood Hausman test (Q1)")
-    if (!cl$converged) warning("The composite-likelihood estimator did not converge in 50 Newton steps; Q1 is unreliable.", call. = FALSE)
+    if (isTRUE(cl$failed)) {
+      qf <- list(stat = NA_real_, psd = NA, ginv = TRUE, df = 0L, degenerate = FALSE)
+      warning("The composite-likelihood estimator does not exist at this fit (its sensitivity matrix is singular: the pairwise likelihoods do not identify every ",
+              "coefficient, as when more coefficients diverge than the fit's separation check names); Q1 is not computed (NA).", call. = FALSE)
+    } else {
+      if (isTRUE(qf$degenerate)) .pc_degenerate_warning("The composite-likelihood Hausman test (Q1)")
+      if (!cl$converged) warning("The composite-likelihood estimator did not converge in 100 Newton steps; Q1 is unreliable.", call. = FALSE)
+    }
     rows[[length(rows) + 1L]] <- data.frame(test = paste0("Fok-Paap CL Hausman (Q1, ", vcov, ")"), statistic = qf$stat, df = qf$df,
                                             p.value = stats::pchisq(max(qf$stat, 0), qf$df, lower.tail = FALSE), psd = qf$psd, pairs = pairs, stringsAsFactors = FALSE)
     details$theta_cl <- stats::setNames(cl$theta, D$par_names); details$vcov_cl <- V_cl; details$cl_converged <- cl$converged
   }
   do_gmm <- "gmm" %in% tests
+  if (do_gmm && !is.null(sp)) {
+    ## a fit with diverging directions: the pairwise moment conditions have no
+    ## finite solution along them either, and the moments at the point where
+    ## the search stopped depend on that point (and through it on the units of
+    ## the covariates), so Q2 is not computed
+    msg <- paste0("Q2 is not computed (NA): the fit has diverging coefficients (", paste(utils::head(sp$terms, 6L), collapse = ", "), if (length(sp$terms) > 6L) ", ..." else "",
+                  "), and the moment conditions have no finite solution along them.")
+    if (identical(tests, "gmm")) warning(msg, call. = FALSE)             # with Q1 asked for too, the separation warning above says it
+    rows[[length(rows) + 1L]] <- data.frame(test = paste0("Fok-Paap GMM overidentification (Q2, ", gmm, ")"), statistic = NA_real_, df = 0L,
+                                            p.value = NA_real_, psd = NA, pairs = pairs, stringsAsFactors = FALSE)
+    do_gmm <- FALSE
+  }
   if (do_gmm) {
     nz <- D$p + D$q
     M <- length(P) * nz
@@ -594,15 +794,15 @@ fp_tests <- function(object, pairs = c("all", "base"), tests = c("cl", "gmm"), g
     mom <- .pc_gmm_moments(P, theta_ml, n, K, nz, D$w)
     nw <- mom$nw
     Omega <- mom$Omega
-    rc <- rcond(Omega)
-    Winv <- function(Om) tryCatch(solve(Om), error = function(e) { .pc_pass_limit(e); MASS::ginv(Om) })
+    nrc <- function(Om) tryCatch(rcond(Om / tcrossprod(.pc_unit_diag(Om))), error = function(e) { .pc_pass_limit(e); NA_real_ }); rc <- nrc(Omega)
+    om_rank <- M; Winv <- function(Om) { iv <- .pc_inverse(Om, gtol = sqrt(.Machine$double.eps)); om_rank <<- iv$rank; iv$inv }
     if (gmm == "projected") {
       W <- Winv(Omega); gbar <- mom$gbar; Dm <- mom$D
-      Pm <- W - W %*% Dm %*% solve(crossprod(Dm, W %*% Dm)) %*% t(Dm) %*% W
+      Pm <- W - W %*% Dm %*% .pc_inverse(crossprod(Dm, W %*% Dm))$inv %*% t(Dm) %*% W
       stat <- nw * as.numeric(t(gbar) %*% Pm %*% gbar)
       theta_g <- theta_ml; iters <- 0L; conv <- TRUE
     } else {
-      theta_g <- theta_ml; conv <- FALSE; obj_old <- Inf
+      theta_g <- theta_ml; conv <- FALSE; obj_old <- Inf; gn_ginv <- FALSE; gn_failed <- FALSE
       n_updates <- if (gmm == "two-step") 1L else maxit
       for (iters in seq_len(n_updates)) {
         mom_g <- .pc_gmm_moments(P, theta_g, n, K, nz, D$w)
@@ -613,8 +813,13 @@ fp_tests <- function(object, pairs = c("all", "base"), tests = c("cl", "gmm"), g
         for (inner in seq_len(20L)) {
           mm <- .pc_gmm_moments(P, th, n, K, nz, D$w)
           gbar <- mm$gbar; Dm <- mm$D
-          step <- tryCatch(solve(crossprod(Dm, W %*% Dm), crossprod(Dm, W %*% gbar)), error = function(e) { .pc_pass_limit(e); NULL })
-          if (is.null(step)) break
+          ## the step's matrix is inverted by the rule of .pc_inverse() (normalized,
+          ## so that the covariates' units do not decide); where it is singular
+          ## the step is taken on the generalized inverse and the result says so
+          A <- crossprod(Dm, W %*% Dm); rhs <- crossprod(Dm, W %*% gbar)
+          iv <- .pc_inverse(A); if (isTRUE(iv$ginv)) gn_ginv <- TRUE
+          step <- iv$inv %*% rhs
+          if (!all(is.finite(step))) { gn_failed <- TRUE; break }
           th <- th - as.vector(step)
           if (max(abs(step)) < 1e-8 * max(1, max(abs(th)))) break
         }
@@ -625,23 +830,35 @@ fp_tests <- function(object, pairs = c("all", "base"), tests = c("cl", "gmm"), g
         if (max(abs(th - theta_g)) < 1e-6 * max(1, max(abs(th))) || abs(obj - obj_old) < 1e-8 * max(1, abs(obj))) { theta_g <- th; conv <- TRUE; break }
         theta_g <- th; obj_old <- obj
       }
+      if (gn_failed) warning("A Gauss-Newton step of the GMM estimator could not be computed; Q2 is evaluated at the last iterate and is unreliable.", call. = FALSE)
+      else if (gn_ginv) warning("The GMM estimator's step matrix was singular and a generalized inverse was used; some parameters are not identified by the pairwise moments, and Q2 is unreliable.", call. = FALSE)
       if (!conv) warning("The iterated GMM estimator did not settle within ", maxit, " weight-matrix updates; the last iterate is used. ",
                          "Consider gmm = \"two-step\" or \"projected\".", call. = FALSE)
       mom_g <- .pc_gmm_moments(P, theta_g, n, K, nz, D$w)
       W <- Winv(mom_g$Omega); gbar <- mom_g$gbar
       stat <- nw * as.numeric(t(gbar) %*% W %*% gbar)
-      rc <- rcond(mom_g$Omega)
+      rc <- nrc(mom_g$Omega)
     }
+    ## a singular moment covariance (linearly dependent moments: few or
+    ## discrete covariates): the generalized inverse leaves the dependent
+    ## directions out of the statistic, and they leave the degrees of freedom
+    df2 <- om_rank - K
+    if (df2 < 1L) { stat <- NA_real_; df2 <- 0L }
     rows[[length(rows) + 1L]] <- data.frame(test = paste0("Fok-Paap GMM overidentification (Q2, ", gmm, ")"), statistic = stat, df = df2,
                                             p.value = stats::pchisq(max(stat, 0), df2, lower.tail = FALSE), psd = NA, pairs = pairs, stringsAsFactors = FALSE)   # no covariance difference (as in iia_tests())
-    details$theta_gmm <- stats::setNames(theta_g, D$par_names); details$gmm_iterations <- iters; details$gmm_converged <- conv
+    details$theta_gmm <- stats::setNames(theta_g, D$par_names); details$gmm_iterations <- iters; details$gmm_converged <- conv && !(gmm != "projected" && gn_failed)
     details$moment_rcond <- rc; details$n_moments <- M
-    if (is.finite(rc) && rc < 1e-12) warning("The moment covariance matrix is nearly singular (reciprocal condition number ", format(rc, digits = 2),
-                                             "): with few or weak covariates the pairwise overidentifying restrictions carry little information.", call. = FALSE)
+    details$moment_rank <- om_rank
+    if (om_rank < M) warning("The moment covariance matrix is singular (rank ", om_rank, " of ", M, " moments): some pairwise moments are linear combinations of the others, ",
+                             if (om_rank - K < 1L) "and no overidentifying restriction is left; Q2 is not computed (NA)."
+                             else paste0("so Q2 has ", om_rank - K, " degrees of freedom (the rank minus the ", K, " parameters)."), call. = FALSE)
+    else if (is.finite(rc) && rc < 1e-9) warning("The moment covariance matrix is nearly singular (reciprocal condition number ", format(rc, digits = 2),
+                                                 "): the pairwise overidentifying restrictions carry little information, and the chi-square reference of Q2 can be far off.", call. = FALSE)
   }
   out <- do.call(rbind, rows); rownames(out) <- NULL
   attr(out, "method") <- paste0("Fok-Paap (2025) misspecification tests, ", pairs, " pairs")
   attr(out, "details") <- details
+  if (!is.null(details$q1_left_out)) attr(out, "q1_left_out") <- list(terms = details$q1_left_out, rank = details$q1_left_out_rank)
   class(out) <- c("iia_test", "data.frame")
   out
 }
@@ -659,6 +876,9 @@ fp_tests <- function(object, pairs = c("all", "base"), tests = c("cl", "gmm"), g
 #'   A fit with diverging coefficients (separation) draws a warning: the
 #'   contrasts then compare estimates that do not exist and can reject
 #'   spuriously.
+#'   The Fok-Paap \eqn{Q_1} row leaves the diverging directions out of its
+#'   comparison, with its degrees of freedom reduced, and the printed table
+#'   says so (see [fp_tests()]).
 #' @param drop Alternatives for the Hausman-McFadden and Small-Hsiao tests;
 #'   default all.
 #' @param splits Number of Small-Hsiao half-splits (default 10; the battery
@@ -705,6 +925,7 @@ iia_tests <- function(object, drop = NULL, splits = 10L, seed = NULL, pairs = c(
                data.frame(test = fp$test, alternative = "", statistic = fp$statistic, df = fp$df, p.value = fp$p.value, psd = ifelse(q1, fp$psd, NA), share_separated = NA_real_))
   rownames(out) <- NULL
   attr(out, "method") <- "Tests of IIA / misspecification of the multinomial logit"
+  attr(out, "q1_left_out") <- attr(fp, "q1_left_out")
   class(out) <- c("iia_battery", "iia_test", "data.frame")
   out
 }
@@ -715,9 +936,14 @@ print.iia_test <- function(x, digits = 3, ...) {
   y <- as.data.frame(x)
   if ("statistic" %in% names(y)) y$statistic <- round(y$statistic, digits)
   if ("p.value" %in% names(y)) y$p.value <- format.pval(y$p.value, digits = digits)
+  if ("p.boot" %in% names(y)) y$p.boot <- round(y$p.boot, 4)
   if ("share" %in% names(y)) y$share <- round(y$share, digits)
   print.data.frame(y, row.names = FALSE)
   if (!is.null(attr(x, "note"))) cat("Note:", attr(x, "note"), "\n")
+  lo <- attr(x, "q1_left_out")
+  if (!is.null(lo)) cat("Q1 leaves ", lo$rank, if (lo$rank == 1L) " diverging direction" else " diverging directions", " out of its comparison (through ",
+                        paste(utils::head(lo$terms, 6L), collapse = ", "), if (length(lo$terms) > 6L) ", ..." else "",
+                        "), with its degrees of freedom reduced; Q2 is not computed on such a fit.\n", sep = "")
   if (!is.null(attr(x, "summary"))) { cat("\nAcross splits:\n"); s <- attr(x, "summary"); s$median_statistic <- round(s$median_statistic, digits); s$median_p <- round(s$median_p, digits); print.data.frame(s, row.names = FALSE) }
   if (is.null(attr(x, "note")) && !is.null(x$psd) && any(!x$psd, na.rm = TRUE))
     cat("psd = FALSE: the covariance difference was not positive semi-definite for that row. A negative statistic is no evidence against the model (p-value 1); a positive one from a variance-difference form is unreliable (see the test's help).\n")

@@ -209,8 +209,8 @@ adds before the challengers the same search under the other split link,
 whose estimates, the split coefficients rescaled by 1.6 (the ratio of the
 logistic and normal densities at zero), are polished under this link as one
 more candidate: the two links' surfaces differ, and on the vote-choice data
-of Glasgow (2001) the logit's own search ends 4.9 log-likelihood units below
-the maximum it reaches from the probit's estimates. It about doubles the
+of Glasgow (2001) the logit split's own search ends 4.9 log-likelihood units below
+the maximum it reaches from the probit split's estimates. It about doubles the
 fitting time, so it is not the default; use it when the message reports
 several maxima. The highest maximum found is reported; it need not be the
 global one, so probe other basins with \code{start} too. The challengers start
@@ -239,8 +239,8 @@ The likelihood can also rise without bound along a direction of the
 outcome coefficients, to a supremum at infinity: separation within the
 mixture. The outcome stage can then predict some cases of the inflated
 alternative with certainty while the split equation puts its other cases
-in the captive regime, which overlapping data under the logit do not
-prevent (\code{\link[=separation]{separation()}} checks the logit and the rank-ordered logit only).
+in the captive regime, which overlapping data under the multinomial logit do not
+prevent (\code{\link[=separation]{separation()}} checks the multinomial logit and the rank-ordered logit only).
 Strictly, the maximum-likelihood estimate then does not exist, and the
 reported fit is the highest end the search reaches. On \code{pres2004} a search from
 200 starts finds two interior maxima, the published fit (-545.279) and
@@ -258,7 +258,7 @@ d <- rmnl(800, beta = cbind(b = c(0.5, -1, 0.8), c = c(-0.3, 0.6, -0.5)),
           delta = c(0.5, 1.2), inflate = "a")
 m <- imnl(y ~ x1 + x2 | z1, data = d, inflate = "a")
 summary(m)
-## the inflated model nests the logit at a boundary (phi = 1): compare the
+## the inflated model nests the multinomial logit at a boundary (phi = 1): compare the
 ## two by information criteria here, or by boot_lr_test(m0, m)
 m0 <- mnl(y ~ x1 + x2, data = d)
 compare_models(m0, m)

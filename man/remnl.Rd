@@ -91,7 +91,7 @@ serial and parallel runs use different random streams.}
 of \code{coef()} but on the INTERNAL scale, which differs from \code{coef()} for the
 structural parameters (the logarithms of the inclusive values, scales, and
 standard deviations; the free Cholesky elements with a log diagonal for
-the probit covariance). \code{object$theta} of an earlier fit is on that scale.
+the multinomial probit covariance). \code{object$theta} of an earlier fit is on that scale.
 Rarely needed for \code{mnl()}, whose log-likelihood is globally concave; the
 other estimators start from the \code{mnl()} estimates (and \code{imnl()} from a
 multistart grid), so \code{start} serves to probe another basin of a
@@ -121,7 +121,7 @@ the model, not only the labels. Intercepts independent relative to one base
 are correlated relative to another (\eqn{u_j - u_c} and \eqn{u_k - u_c}
 share \eqn{u_c}), which the diagonal model cannot represent. Fits with
 different \code{ref} are therefore different models, with different
-log-likelihoods and different tests against the logit. In the example
+log-likelihoods and different tests against the multinomial logit. In the example
 below the log-likelihood is -488.49 with base \code{a} and -490.50 with base
 \code{b} (a fit whose standard deviation for \code{a} runs to zero, with a boundary
 warning), and the likelihood ratio against \code{\link[=mnl]{mnl()}} is 4.53 and 0.50. Choose the
@@ -130,7 +130,7 @@ grounds: the alternative whose utility is least expected to vary across
 units (an outside option, abstention). Fits with different bases have the
 same number of parameters and can be compared descriptively by their
 log-likelihoods, but a base chosen that way makes the test against the
-logit a maximum over the bases, for which the chi-square reference does
+multinomial logit a maximum over the bases, for which the chi-square reference does
 not hold.
 The likelihood of unit \eqn{g} integrates the
 product of the MNL probabilities of its cases over \eqn{u_g} by adaptive

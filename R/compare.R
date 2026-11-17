@@ -319,8 +319,8 @@ print.vuong <- function(x, digits = 3, ...) {
 
 ## The nesting checks shared by lr_test() and boot_lr_test(). Returns the kind
 ## of restriction: "interior" (the chi-square reference applies), "sd" (the
-## logit inside a random-intercept fit: sd = 0 is on the boundary and the
-## chi-square p-value is conservative), or "inflation" (the logit inside the
+## multinomial logit inside a random-intercept fit: sd = 0 is on the boundary and the
+## chi-square p-value is conservative), or "inflation" (the multinomial logit inside the
 ## inflated multinomial logit: phi = 1 is on the boundary and the split coefficients are
 ## not identified there, so only the parametric bootstrap applies; accepted
 ## only when allow_inflation = TRUE).
@@ -366,7 +366,7 @@ print.vuong <- function(x, digits = 3, ...) {
     stop("The two inflated models differ in the inflated alternative or the link; they are not nested.", call. = FALSE)
   if (!identical(restricted$family, full$family)) {
     if (!(restricted$family == "mnl" && full$family %in% c("nlogit", "hev", "remnl")))
-      stop("Only the multinomial logit nested in a nested logit, an HEV, or a random-intercept fit can be compared across families; the probit does not nest the logit (use vuong()).", call. = FALSE)
+      stop("Only the multinomial logit nested in a nested logit, an HEV, or a random-intercept fit can be compared across families; the multinomial probit does not nest the multinomial logit (use vuong()).", call. = FALSE)
     if (!identical(nonstr(restricted), nonstr(full)))
       stop("The two fits must have the same covariates (the restriction is lambda = 1 / scale = 1 / sd = 0).", call. = FALSE)
     return(if (full$family == "remnl") "sd" else "interior")
@@ -426,7 +426,7 @@ print.vuong <- function(x, digits = 3, ...) {
   quiet <- function(expr) tryCatch(suppressWarnings(suppressMessages(expr)), error = function(e) { .pc_pass_limit(e); NULL })
   f <- quiet(.pc_fit_design(D, se = "none", maxit = maxit, reltol = reltol, check = FALSE))
   best <- if (is.null(f)) NULL else list(par = unname(f$theta), value = -f$loglik, converged = isTRUE(f$converged))
-  ## a concave log-likelihood (the logit and the rank-ordered logit) has one
+  ## a concave log-likelihood (the multinomial logit and the rank-ordered logit) has one
   ## maximum: the further starts matter only when the fit did not converge
   ## (separation, where the statistic takes the supremum anyway). They took
   ## 92 of 114 s of a ranking boot_lr_test() (local review 2026-11-06)
@@ -480,7 +480,7 @@ print.vuong <- function(x, digits = 3, ...) {
 #' random-intercept model (\eqn{\sigma = 0}) the null distribution is a mixture
 #' of chi-squares with fewer degrees of freedom, so the reported p-value is
 #' conservative and the test can be used as such (a message says so). For the
-#' inflated model against the logit (\eqn{\phi = 1}) the split-equation slopes
+#' inflated model against the multinomial logit (\eqn{\phi = 1}) the split-equation slopes
 #' are not identified under the null, so no simple correction exists: the
 #' function refuses that pair; [boot_lr_test()] calibrates it by simulation
 #' (the normal reference of [vuong()] is not justified there either). The
@@ -490,8 +490,8 @@ print.vuong <- function(x, digits = 3, ...) {
 #' reference is the 50:50 mixture of chi-square(q) and chi-square(q + 1), q
 #' the further restrictions (Self and Liang 1987), as in
 #' `captivity_test(type = "lr")`. The
-#' multinomial probit does not nest the logit: use [vuong()]. Two fits of the
-#' same family other than the logit (two HEV, nested-logit, probit, or
+#' multinomial probit does not nest the multinomial logit: use [vuong()]. Two fits of the
+#' same family other than the multinomial logit (two HEV, nested-logit, multinomial probit, or
 #' random-intercept fits) are accepted when the restricted parameters are a
 #' subset of the full ones and the fits use the same quadrature nodes or
 #' simulation draws. The function also refuses fits with different choice
@@ -581,16 +581,16 @@ lr_test <- function(restricted, full) {
   out
 }
 
-## the statistic of the logit against the constant-share inflated multinomial
+## the statistic of the multinomial logit against the constant-share inflated multinomial
 ## logit (DESIGN.md Phase 4e), shared by lr_test() and boot_lr_test(): stat =
 ## 2 (l_full - l_restricted), q the restrictions inside the space.
 ## * A statistic within max(1e-6, 2e-8 |l|) of zero is the optimizer's
 ##   shortfall at the boundary and counts as 0.
-## * With q = 0 a full fit whose share collapsed (phi -> 1) is the logit
+## * With q = 0 a full fit whose share collapsed (phi -> 1) is the multinomial logit
 ##   itself, and no warning is given when it ends a little below. Its
 ##   statistic is not otherwise set to 0: a share below the boundary flag's
 ##   1e-6 can still carry a real likelihood ratio (local review 2026-11-06,
-##   finding 8). With q > 0 it is the logit with the further coefficients, and
+##   finding 8). With q > 0 it is the multinomial logit with the further coefficients, and
 ##   its ratio is theirs (round 7, A-1).
 ## * Degenerate: a positive statistic from a fit whose outcome coefficients
 ##   diverge or that stopped at a saddle (the split coefficients diverge at a

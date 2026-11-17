@@ -14,7 +14,7 @@ that do not exist.}
 
 \item{alternatives}{The alternatives to test (labels); default all.}
 
-\item{type}{\code{"score"} (default; computed from the logit fit alone) or
+\item{type}{\code{"score"} (default; computed from the multinomial logit fit alone) or
 \code{"lr"} (the likelihood ratio against the constant-share inflated multinomial logit,
 one refit per alternative).}
 }
@@ -35,7 +35,7 @@ alternative:
 \item \code{warnings} (the inflated fit's, joined), \code{note};
 \item \code{status}:
 \itemize{
-\item \code{"logit"}: the fit reached the logit; statistic 0, p-value 1, and
+\item \code{"logit"}: the fit reached the multinomial logit; statistic 0, p-value 1, and
 share 0, or NA when the share is not identified;
 \item \code{"interior"}: the mixture p-value;
 \item \code{"degenerate"}: diverging outcome coefficients or a saddle; the
@@ -59,16 +59,16 @@ alternative is this package's addition. The score form needs only the
 need at least three alternatives. The score of case \eqn{i} in
 \eqn{\theta_j} at
 \eqn{\theta = 0} is \eqn{1\{y_i = j\}/P_{ij} - 1}: it is positive when the
-cases that chose \eqn{j} are ones the logit gave a low probability to,
+cases that chose \eqn{j} are ones the multinomial logit gave a low probability to,
 which is what captive choosers produce. The expected information at the
-logit estimates, with the coefficients partialled out, gives a one-sided z
+multinomial logit estimates, with the coefficients partialled out, gives a one-sided z
 statistic for each alternative (captivity cannot be negative) and a joint
 chi-square statistic over the alternatives tested. A rejection for the
 base alternative of a vote-choice model is evidence of routine choosers of
 it, the case the inflated multinomial logit \code{\link[=imnl]{imnl()}} models.
 }
 \details{
-The constant captivity parameters make the logit an ordinary boundary
+The constant captivity parameters make the multinomial logit an ordinary boundary
 point of the dogit (\eqn{\theta = 0}), so the score test is regular there,
 unlike the comparison with \code{\link[=imnl]{imnl()}}, whose split coefficients are not
 identified at \eqn{\phi = 1}; it can detect covariate-dependent captivity
@@ -76,14 +76,14 @@ through its average (but see the loss of power below). Tse refers the joint stat
 chi-square with \eqn{J} degrees of freedom, reads the boundary null as a
 test for arbitrarily small \eqn{\theta}, and found its size at 0.05
 acceptable in his simulations (three alternatives, 50 and 300 cases).
-When the logit's fitted probabilities of the tested alternatives do not vary
+When the multinomial logit's fitted probabilities of the tested alternatives do not vary
 across cases (no case-specific and no alternative-specific covariates),
 captivity is not identified and the statistic is undefined.
 
 The weights \eqn{1/P_{ij}} make the statistic heavy-tailed when some fitted
-probabilities are small: a single case that chose an alternative the logit
+probabilities are small: a single case that chose an alternative the multinomial logit
 gave a probability of 0.001 adds about 1000 to its score. In the package's
-simulations under the logit (three and four alternatives, 500 and 2,000
+simulations under the multinomial logit (three and four alternatives, 500 and 2,000
 cases, smallest fitted probabilities around 0.0005) the one-sided tests
 rejected in 2.8 to 6.3 percent of samples at the 0.05 level and the joint
 test in 5.7 to 7.3 percent, but at the 0.01 level they rejected in 1.3 to
@@ -97,7 +97,7 @@ percent, joint 16 to 23 percent).
 
 The same weights cost power. A case whose fitted probability of an
 alternative is small and that did not choose it adds -1 to the score but
-\eqn{1/P_{ij} - 1} to its variance. On \link{pa2006} (Replication I's logit) the
+\eqn{1/P_{ij} - 1} to its variance. On \link{pa2006} (Replication I's multinomial logit) the
 one-sided z of abstention is 0.50, while \code{\link[=imnl]{imnl()}} with a constant split,
 the test's own alternative, raises the log-likelihood by 10.5 on one
 parameter, at a captive share of 0.20. The score is 37.3 (a numerical
@@ -113,9 +113,9 @@ evidence against captivity. (On \link{fluvax} the two agree: z = 0.63 for
 \code{type = "lr"} measures that gain. For each alternative it fits the
 inflated multinomial logit with that alternative inflated and an
 intercept-only split equation, which is the dogit with a constant captive
-share of it. The fit uses the logit's own cases, weights, offsets and
-choice sets, \code{\link[=imnl]{imnl()}}'s search, and a start at the logit itself. It reports
-the likelihood ratio against the logit and the captive share. The logit is
+share of it. The fit uses the multinomial logit's own cases, weights, offsets and
+choice sets, \code{\link[=imnl]{imnl()}}'s search, and a start at the multinomial logit itself. It reports
+the likelihood ratio against the multinomial logit and the captive share. The multinomial logit is
 a captive share of zero, a boundary point of the share's space. The point
 is a regular one when the other parameters are identified there and the
 share's score is not a combination of theirs, that is, when the fitted
@@ -127,7 +127,7 @@ chi-square(1) tail (and 1 for a statistic of 0).
 \item On \code{pa2006} it gives 20.95 for abstention (p = 2.4e-6, a captive share
 of 0.196).
 \item There, where one respondent carries half the information, a parametric
-bootstrap from the logit (199 replicates) put 0.61 of the statistics at
+bootstrap from the multinomial logit (199 replicates) put 0.61 of the statistics at
 zero (the mixture puts half there) and exceeded the mixture's 0.10, 0.05
 and 0.01 critical values in 0.101, 0.040 and 0.010 of the replicates:
 the upper tail agreed with the mixture within Monte Carlo error, and the

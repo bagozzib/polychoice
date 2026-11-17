@@ -135,3 +135,53 @@ every Monte Carlo (standing rule) before the tarball is built.
 9. On acceptance: tag v0.1.0 on the submitted commit, GitHub release, README
    badges and install.packages() first, CRAN URL into DESCRIPTION URL and
    inst/CITATION at the next version.
+
+## For 0.1.1
+
+The author's decision of 2026-11-15: the items listed here on 2026-11-14 and
+11-15 are done before the first release (DESIGN.md Phase 4g; ledger entry of
+2026-11-15). Done: model names in full; Q2 and Q1 of fp_tests() in other
+units; Q1 on a separated fit; the GMM step's silent exit; a `singular` flag
+that does not depend on where the search stopped (a polish to stationarity,
+not the rule on the scores); Wald tests on a singular fit; profile limits
+that do not verify; the second start of a penalized fit; the saddle step's
+second start (koyama2025_t4walter, mnprobit: -492.6971 again).
+
+Traced, with no change to the package:
+
+* mehrez2024_t4, mnprobit: alone on the machine on build 8dce1271fc30 it
+  takes 1,572 s and ends where build beb30c4880b2 did (-422.3993, largest
+  scaled gradient 23.4, not converged); it reached the 1,800 s cap only
+  beside the other streams (probes/2026-11-15/). The stress chain's step
+  cap is 3,600 s from the next run on, which also covers jost2025_a25's
+  inflated fits (750 to 1,400 s alone).
+
+Open:
+
+* First for 0.1.1 (the author, 2026-11-16): tests on a clustered covariance
+  with fewer clusters than coefficients. Q1's joint covariance then has the
+  rank of the clusters, the statistic is computed on that column space with
+  its rank as the degrees of freedom, and nothing warns: eifert2010_t4 (22
+  clusters, 84 coefficients) 10.44 on 21 degrees of freedom, goldring2023_all5
+  (16, 32) 90.65 on 14, kardasheva2013_t5m5 (19, 57) 28.33 on 18; on build
+  8dce1271fc30 150.03, 189.24 and 22.55, changing with the covariates' units
+  (probes/2026-11-16/q1_units_7.txt, q1_units_8.txt). Q2 on eifert2010_t4 is
+  0.65 on 126 degrees of freedom. One rule for Q1, Q2, the joint
+  Hausman-McFadden test and the Wald tests of term_test() and combine_test()
+  (not yet examined in that case).
+* fp_tests(), Q2 with gmm = "projected": in two small simulations of the
+  adversarial review of 2026-11-15 it rejected 0.8 and 0 percent at the 5
+  percent level (two-step: 5.2 and 11.7 percent); probes/2026-11-15/review/
+  r4_mc.R and r5_mc2.R. The size study of the frozen run covers the default.
+* A fit of an unidentified model that stops with a reciprocal condition
+  number above 1e-6 is not polished and not flagged (DESIGN.md Phase 4g,
+  item 4).
+* `start_logliks` is not updated after the polish to stationarity (a
+  difference of the order of 1e-10).
+* The gate of fp_tests() on an ill-conditioned information depends on a
+  covariate's origin (a calendar year); the help page says so.
+* Robust standard errors of diverging coefficients: on one separated
+  rank-ordered fit with tied rankings (the ledger's entry of 2026-11-15) they
+  change from 1.60 to 2.01 with a change of the
+  estimates in the eighth digit (analytic: 4,079). The fit warns of the
+  separation; the sandwich there could be reported as NA.

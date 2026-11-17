@@ -217,25 +217,23 @@ tests, the rows of the battery that reject:
 
 ```{r boot}
 set.seed(2)
-bf <- boot_pvalue(m, fp_tests, B = 49)
+bf <- boot_pvalue(m, fp_tests, B = 399)
 bf
 attr(bf, "flag_reasons")
 attr(bf, "p.boot_unflagged")
 ```
 
-Calibrated, \(Q_2\) still rejects: none of the 49 replicate statistics
-reaches the observed one, so `p.boot` is 0.02, the smallest value 49
-replicates can give. For \(Q_1\) the overall `p.boot` of 0.26 hides where the
-exceedances come from. The ten flagged replicates are simulated samples in
-which the nonresponse equation separates on `voted2004`, the same mechanism as
-in the Small-Hsiao splits above, and every one of them exceeds the observed
-\(Q_1\), while only two of the 39 unflagged replicates do. The observed data
-do not separate. Over the unflagged replicates \(Q_1\)'s bootstrap p-value is
-0.075 and \(Q_2\)'s 0.025, but that is a p-value conditional on samples that do
-not separate, whose size has not been studied; `p.boot` remains the
-calibrated one. On these data \(Q_2\) is the decisive Fok-Paap test.
-\(Q_1\)'s calibrated p-value is 0.26; leaving out the separated replicates
-gives 0.075, a figure whose size has not been studied.
+Calibrated, both Fok-Paap tests still reject. Two of the 399 replicate
+statistics reach the observed \(Q_1\), so its `p.boot` is 0.0075. The 47
+flagged replicates are simulated samples in which the nonresponse equation
+separates on `voted2004`, the same mechanism as in the Small-Hsiao splits
+above: its intercept falls and its `voted2004` coefficient rises without
+bound, their sum staying finite. Along that one direction neither estimator
+has an estimate, so \(Q_1\) leaves it out and compares the two estimators
+on the other 23, and \(Q_2\) is not computed in those samples (`?fp_tests`).
+Five of the other 352 replicate statistics reach the observed \(Q_2\), and
+its `p.boot` is 0.017. The observed data do not separate, and over the
+unflagged replicates the two p-values are 0.0085 and 0.017.
 
 ## The score test against a nested logit
 

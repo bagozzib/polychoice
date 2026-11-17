@@ -19,6 +19,21 @@
 #'   [confint.choicemodel()] (z against 1 for inclusive values and scales,
 #'   intervals on the log scale for positive structural parameters, profile
 #'   penalized-likelihood intervals for a penalized fit).
+#' @section Multiple imputation:
+#' `mice::pool()` combines a list of fits, one per completed data set, through
+#' these methods: the pooled estimates and standard errors are Rubin's rules.
+#' Three points need care.
+#' * Fit the model on each completed data set yourself: `with(imp, mnl(...))`
+#'   does not work, because the estimators take the data as an argument.
+#' * Give `pool()` the complete-data degrees of freedom, `dfcom = nobs(fit) -
+#'   length(coef(fit))`. Left to itself, mice 3.19 counts one residual per
+#'   case and alternative, about J times too many, and its reference t
+#'   distributions are then too narrow.
+#' * The pooled statistic tests each parameter against 0 on the scale
+#'   reported. For inclusive values, scales, and covariance parameters that is
+#'   not the test [summary.choicemodel()] reports. The fits' flags
+#'   (`converged`, `boundary`, `singular`, `n_modes`) are not pooled either:
+#'   check them on each fit first, as the example does.
 #' @examples
 #' if (requireNamespace("broom", quietly = TRUE)) {
 #'   set.seed(1)
@@ -27,6 +42,18 @@
 #'   broom::tidy(m, conf.int = TRUE)
 #'   broom::glance(m)
 #'   head(broom::augment(m))
+#' }
+#' \donttest{
+#' ## multiple imputation: one fit per completed data set, pooled by mice
+#' if (requireNamespace("mice", quietly = TRUE)) {
+#'   set.seed(1)
+#'   d <- rmnl(500, beta = cbind(b = c(0.5, -1, 0.8), c = c(-0.3, 0.6, -0.5)))
+#'   d$x1[sample(500, 80)] <- NA
+#'   imp <- mice::mice(d, m = 5, printFlag = FALSE, seed = 1)
+#'   fits <- lapply(1:5, function(i) mnl(y ~ x1 + x2, data = mice::complete(imp, i)))
+#'   all(vapply(fits, function(f) f$converged && !f$boundary && !f$singular, logical(1)))
+#'   summary(mice::pool(fits, dfcom = nobs(fits[[1]]) - length(coef(fits[[1]]))))
+#' }
 #' }
 #' @seealso [summary.choicemodel()]; `modelsummary::modelsummary()` consumes
 #'   these methods, and `texreg::screenreg()` uses the package's `extract()`
@@ -64,7 +91,7 @@ glance.choicemodel <- function(x, ...) {
   out <- data.frame(logLik = x$loglik, AIC = -2 * x$loglik + 2 * x$df, BIC = -2 * x$loglik + log(x$nobs_weighted) * x$df,
                     df = x$df, nobs = x$n, row.names = NULL)
   if (x$inflated) { out$inflate <- paste(x$inflate, collapse = ", "); out$share_inflated <- stats::weighted.mean(x$y %in% .pc_kc(x), x$weights) }
-  out$converged <- isTRUE(x$converged); out$boundary <- isTRUE(x$boundary); out$ill_conditioned <- isTRUE(x$ill_conditioned)
+  out$converged <- isTRUE(x$converged); out$boundary <- isTRUE(x$boundary); out$ill_conditioned <- isTRUE(x$ill_conditioned); out$singular <- isTRUE(x$singular)
   out$n_modes <- if (is.null(x$n_modes)) 1L else as.integer(x$n_modes)
   if (!is.null(x$fe)) { out$bias_correct <- if (is.null(x$bias_correct)) "none" else x$bias_correct; out$jackknife_refused <- !is.null(x$jackknife_refused) }
   if (.pc_penalized(x)) out$penalized <- TRUE                       # logLik, AIC, BIC at penalized estimates, not maximum-likelihood ones

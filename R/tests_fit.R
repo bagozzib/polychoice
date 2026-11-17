@@ -30,6 +30,37 @@
   z <- th / dn
   as.numeric(crossprod(z, solve(Vn, z)))
 }
+## whether the contrasts Rm theta are identified on a fit whose information
+## is singular (object$singular). A contrast c'theta is identified when c is
+## orthogonal to the null space of the information: the directions t with
+## H t = 0, along which the log-likelihood is constant. They are taken from
+## the information itself at the estimates (the Hessian, or fn$info for a
+## penalized fit), normalized to a unit diagonal, as the singular vectors
+## below .pc_singular_tol of the largest singular value, the directions the
+## generalized inverse of .pc_inverse() drops; with H = D Hn D a null vector
+## n of Hn gives t = n / d. The covariance is not used: a bootstrap or
+## sandwich covariance of a singular fit can have full rank, and the range
+## of a generalized inverse scaled by D^-1 is not the orthogonal complement
+## of the null space. A contrast is identified when its component along each
+## t is below 1e-6 of the product of the two lengths. Where the information
+## cannot be computed nothing is called identified
+.pc_wald_identified <- function(object, Rm) {
+  if (!isTRUE(object$singular)) return(TRUE)
+  fn <- tryCatch(.pc_fns(object$design), error = function(e) { .pc_pass_limit(e); NULL })
+  H <- if (is.null(fn)) NULL else tryCatch(if (!is.null(fn$info)) fn$info(object$theta) else if (!is.null(fn$hess)) fn$hess(object$theta) else NULL,
+                                           error = function(e) { .pc_pass_limit(e); NULL })
+  if (is.null(H) || !all(is.finite(H))) return(FALSE)
+  dn <- .pc_unit_diag(H); s <- svd(H / tcrossprod(dn))
+  null <- s$d <= .pc_singular_tol * s$d[1L]
+  if (!any(null)) return(TRUE)
+  Tn <- s$v[, null, drop = FALSE] / dn                                  # the null directions in theta's coordinates
+  comp <- abs(Rm %*% Tn)
+  all(comp <= 1e-6 * outer(sqrt(rowSums(Rm^2)), sqrt(colSums(Tn^2))))
+}
+.pc_wald_unid_warning <- function(what) {
+  if (length(what)) warning("The fit's information matrix is singular, and the coefficients of ", paste(what, collapse = ", "), " involve parameters the data do not identify ",
+                            "(see the fit's warnings), so ", if (length(what) > 1L) "their" else "its", " Wald statistic is NA.", call. = FALSE)
+}
 .pc_wald_na_warning <- function(what) {
   if (length(what)) warning("The covariance of the coefficients of ", paste(what, collapse = ", "), " is singular (a coefficient at a boundary, such as a ",
                             "separated level; see the fit's warnings), so ", if (length(what) > 1L) "their" else "its", " Wald statistic is NA; type = \"lr\" refits instead.", call. = FALSE)
@@ -107,6 +138,7 @@ combine_test <- function(object, alternatives = NULL, type = c("wald", "lr")) {
   ## separation the fits' values are where the optimizer stopped
   sup_full <- if (type == "lr" && !firth) .pc_sup_loglik(D, object$theta, object$loglik) else NULL
   sup_used <- !is.null(sup_full) && sup_full$type %in% c("complete", "quasi-complete")
+  unid <- character(0)
   rows <- lapply(pairs, function(pr) {
     j <- match(pr[1L], D$levels); k <- match(pr[2L], D$levels)
     ## the restriction: equal non-constant coefficients of j and k (zero when one is the base)
@@ -122,6 +154,7 @@ combine_test <- function(object, alternatives = NULL, type = c("wald", "lr")) {
       delta <- as.vector(Rm %*% object$theta)
       Vd <- Rm %*% object$vcov_internal %*% t(Rm)
       stat <- .pc_wald(delta, Vd)
+      if (!.pc_wald_identified(object, Rm)) { stat <- NA_real_; unid <<- c(unid, paste(pr, collapse = " & ")) }
     } else {
       ## pooled fit: merge k into j
       Dp <- D
@@ -150,7 +183,7 @@ combine_test <- function(object, alternatives = NULL, type = c("wald", "lr")) {
                p.value = stats::pchisq(max(stat, 0), length(cols), lower.tail = FALSE), stringsAsFactors = FALSE)
   })
   out <- do.call(rbind, rows); rownames(out) <- NULL
-  if (type == "wald") .pc_wald_na_warning(out$pair[is.na(out$statistic)])
+  if (type == "wald") { .pc_wald_unid_warning(unid); .pc_wald_na_warning(setdiff(out$pair[is.na(out$statistic)], unid)) }
   attr(out, "method") <- paste0("Test of combining alternatives (", if (type == "wald") "Wald" else if (firth) paste0("penalized likelihood ratio, ", .pc_penalty_label(object)) else "likelihood ratio, Cramer-Ridder", ")",
                                 if (sup_used) .pc_sup_note else "")
   class(out) <- c("iia_test", "data.frame")
@@ -233,12 +266,15 @@ term_test <- function(object, type = c("wald", "lr")) {
   ## an alternative whose probability vanishes at the supremum contributes no
   ## coefficients to it (.pc_absent_alts; local review 2026-11-06, finding 10)
   absent <- if (type == "lr" && !.pc_penalized(object)) .pc_absent_alts(D) else integer(0)
+  unid <- character(0)
   rows <- lapply(items, function(it) {
     idx <- if (it$part == "x") as.vector(D$idx$beta[it$cols, , drop = FALSE]) else match(it$cols, names(object$theta))
     if (type == "wald") {
       if (is.null(object$vcov_internal)) stop("The Wald form needs a covariance matrix (se != \"none\").", call. = FALSE)
       th <- object$theta[idx]; V <- object$vcov_internal[idx, idx, drop = FALSE]
       stat <- .pc_wald(th, V)
+      Ri <- matrix(0, length(idx), length(object$theta)); Ri[cbind(seq_along(idx), idx)] <- 1
+      if (!.pc_wald_identified(object, Ri)) { stat <- NA_real_; unid <<- c(unid, it$term) }
     } else if (.pc_penalized(object)) {
       ## penalized likelihood ratio: the term's coefficients set to zero in the
       ## full model's penalized log-likelihood (Heinze and Schemper 2001)
@@ -259,7 +295,7 @@ term_test <- function(object, type = c("wald", "lr")) {
     data.frame(term = it$term, statistic = stat, df = dfi, p.value = stats::pchisq(max(stat, 0), dfi, lower.tail = FALSE), stringsAsFactors = FALSE)
   })
   out <- do.call(rbind, rows); rownames(out) <- NULL
-  if (type == "wald") .pc_wald_na_warning(out$term[is.na(out$statistic)])
+  if (type == "wald") { .pc_wald_unid_warning(unid); .pc_wald_na_warning(setdiff(out$term[is.na(out$statistic)], unid)) }
   attr(out, "method") <- paste0("Joint tests of each term across equations (", if (type == "wald") "Wald" else if (.pc_penalized(object)) paste0("penalized likelihood ratio, ", .pc_penalty_label(object)) else "likelihood ratio", ")",
                                 if (sup_used) .pc_sup_note else "",
                                 if (length(absent)) paste0("; never chosen, its probability zero at the suprema and its coefficients not counted in df: ", paste(D$levels[absent], collapse = ", ")) else "")
@@ -446,15 +482,15 @@ nested_lm_test <- function(object, nests, equal_lambda = FALSE, information = c(
 #' need at least three alternatives. The score of case \eqn{i} in
 #' \eqn{\theta_j} at
 #' \eqn{\theta = 0} is \eqn{1\{y_i = j\}/P_{ij} - 1}: it is positive when the
-#' cases that chose \eqn{j} are ones the logit gave a low probability to,
+#' cases that chose \eqn{j} are ones the multinomial logit gave a low probability to,
 #' which is what captive choosers produce. The expected information at the
-#' logit estimates, with the coefficients partialled out, gives a one-sided z
+#' multinomial logit estimates, with the coefficients partialled out, gives a one-sided z
 #' statistic for each alternative (captivity cannot be negative) and a joint
 #' chi-square statistic over the alternatives tested. A rejection for the
 #' base alternative of a vote-choice model is evidence of routine choosers of
 #' it, the case the inflated multinomial logit [imnl()] models.
 #'
-#' The constant captivity parameters make the logit an ordinary boundary
+#' The constant captivity parameters make the multinomial logit an ordinary boundary
 #' point of the dogit (\eqn{\theta = 0}), so the score test is regular there,
 #' unlike the comparison with [imnl()], whose split coefficients are not
 #' identified at \eqn{\phi = 1}; it can detect covariate-dependent captivity
@@ -462,14 +498,14 @@ nested_lm_test <- function(object, nests, equal_lambda = FALSE, information = c(
 #' chi-square with \eqn{J} degrees of freedom, reads the boundary null as a
 #' test for arbitrarily small \eqn{\theta}, and found its size at 0.05
 #' acceptable in his simulations (three alternatives, 50 and 300 cases).
-#' When the logit's fitted probabilities of the tested alternatives do not vary
+#' When the multinomial logit's fitted probabilities of the tested alternatives do not vary
 #' across cases (no case-specific and no alternative-specific covariates),
 #' captivity is not identified and the statistic is undefined.
 #'
 #' The weights \eqn{1/P_{ij}} make the statistic heavy-tailed when some fitted
-#' probabilities are small: a single case that chose an alternative the logit
+#' probabilities are small: a single case that chose an alternative the multinomial logit
 #' gave a probability of 0.001 adds about 1000 to its score. In the package's
-#' simulations under the logit (three and four alternatives, 500 and 2,000
+#' simulations under the multinomial logit (three and four alternatives, 500 and 2,000
 #' cases, smallest fitted probabilities around 0.0005) the one-sided tests
 #' rejected in 2.8 to 6.3 percent of samples at the 0.05 level and the joint
 #' test in 5.7 to 7.3 percent, but at the 0.01 level they rejected in 1.3 to
@@ -483,7 +519,7 @@ nested_lm_test <- function(object, nests, equal_lambda = FALSE, information = c(
 #'
 #' The same weights cost power. A case whose fitted probability of an
 #' alternative is small and that did not choose it adds -1 to the score but
-#' \eqn{1/P_{ij} - 1} to its variance. On [pa2006] (Replication I's logit) the
+#' \eqn{1/P_{ij} - 1} to its variance. On [pa2006] (Replication I's multinomial logit) the
 #' one-sided z of abstention is 0.50, while [imnl()] with a constant split,
 #' the test's own alternative, raises the log-likelihood by 10.5 on one
 #' parameter, at a captive share of 0.20. The score is 37.3 (a numerical
@@ -499,9 +535,9 @@ nested_lm_test <- function(object, nests, equal_lambda = FALSE, information = c(
 #' `type = "lr"` measures that gain. For each alternative it fits the
 #' inflated multinomial logit with that alternative inflated and an
 #' intercept-only split equation, which is the dogit with a constant captive
-#' share of it. The fit uses the logit's own cases, weights, offsets and
-#' choice sets, [imnl()]'s search, and a start at the logit itself. It reports
-#' the likelihood ratio against the logit and the captive share. The logit is
+#' share of it. The fit uses the multinomial logit's own cases, weights, offsets and
+#' choice sets, [imnl()]'s search, and a start at the multinomial logit itself. It reports
+#' the likelihood ratio against the multinomial logit and the captive share. The multinomial logit is
 #' a captive share of zero, a boundary point of the share's space. The point
 #' is a regular one when the other parameters are identified there and the
 #' share's score is not a combination of theirs, that is, when the fitted
@@ -513,7 +549,7 @@ nested_lm_test <- function(object, nests, equal_lambda = FALSE, information = c(
 #' * On `pa2006` it gives 20.95 for abstention (p = 2.4e-6, a captive share
 #'   of 0.196).
 #' * There, where one respondent carries half the information, a parametric
-#'   bootstrap from the logit (199 replicates) put 0.61 of the statistics at
+#'   bootstrap from the multinomial logit (199 replicates) put 0.61 of the statistics at
 #'   zero (the mixture puts half there) and exceeded the mixture's 0.10, 0.05
 #'   and 0.01 critical values in 0.101, 0.040 and 0.010 of the replicates:
 #'   the upper tail agreed with the mixture within Monte Carlo error, and the
@@ -543,7 +579,7 @@ nested_lm_test <- function(object, nests, equal_lambda = FALSE, information = c(
 #'   statistic is then evaluated where the optimizer stopped, at estimates
 #'   that do not exist.
 #' @param alternatives The alternatives to test (labels); default all.
-#' @param type `"score"` (default; computed from the logit fit alone) or
+#' @param type `"score"` (default; computed from the multinomial logit fit alone) or
 #'   `"lr"` (the likelihood ratio against the constant-share inflated multinomial logit,
 #'   one refit per alternative).
 #' @return A data frame of class `"iia_test"`. With `type = "score"`, one row
@@ -560,7 +596,7 @@ nested_lm_test <- function(object, nests, equal_lambda = FALSE, information = c(
 #'   * `top_share` (above);
 #'   * `warnings` (the inflated fit's, joined), `note`;
 #'   * `status`:
-#'     - `"logit"`: the fit reached the logit; statistic 0, p-value 1, and
+#'     - `"logit"`: the fit reached the multinomial logit; statistic 0, p-value 1, and
 #'       share 0, or NA when the share is not identified;
 #'     - `"interior"`: the mixture p-value;
 #'     - `"degenerate"`: diverging outcome coefficients or a saddle; the
@@ -598,7 +634,7 @@ captivity_test <- function(object, alternatives = NULL, type = c("score", "lr"))
   .pc_check_mnl(object, "captivity_test()")
   .pc_no_firth(object, "captivity_test()", if (type == "score") "a score test is evaluated at the maximum-likelihood estimates, where the score of the free parameters vanishes"
                                            else "the likelihood ratio compares maximum-likelihood fits", penalized_forms = FALSE)
-  .pc_separation_warning(object, "captivity_test()", if (type == "score") .pc_score_sep_why else "the logit's log-likelihood is then where its optimizer stopped")
+  .pc_separation_warning(object, "captivity_test()", if (type == "score") .pc_score_sep_why else "the multinomial logit's log-likelihood is then where its optimizer stopped")
   D <- object$design
   tj <- if (is.null(alternatives)) seq_len(D$J) else match(as.character(alternatives), D$levels)
   if (!length(tj) || anyNA(tj) || anyDuplicated(tj)) stop("'alternatives' must name distinct response categories.", call. = FALSE)
@@ -610,7 +646,7 @@ captivity_test <- function(object, alternatives = NULL, type = c("score", "lr"))
   ## 2026-11-06, finding 6), so it is not tested
   never <- tabulate(D$y[D$w > 0], D$J)[tj] == 0L
   ok <- ok & !never
-  if (!any(ok)) stop("The captivity directions are not identified at the logit estimates (the fitted probabilities do not vary across cases: the model needs case-specific or alternative-specific covariates, ",
+  if (!any(ok)) stop("The captivity directions are not identified at the multinomial logit estimates (the fitted probabilities do not vary across cases: the model needs case-specific or alternative-specific covariates, ",
                      "and an alternative must have been chosen to be tested).", call. = FALSE)
   z <- ifelse(ok, s / sqrt(pmax(dv, 0)), NA_real_)
   ## the joint statistic on the correlation scale, with one eigenvalue rule
@@ -633,8 +669,8 @@ captivity_test <- function(object, alternatives = NULL, type = c("score", "lr"))
   out
 }
 
-## the score of the captive odds of each alternative in tj at the logit, and
-## their expected information after the logit's coefficients are partialled
+## the score of the captive odds of each alternative in tj at the multinomial logit, and
+## their expected information after the multinomial logit's coefficients are partialled
 ## out (V); `ok` marks the identified shares (V's diagonal not negligible
 ## against the unadjusted information). Used by both forms of captivity_test().
 .pc_captivity_info <- function(object, tj) {
@@ -655,7 +691,7 @@ captivity_test <- function(object, alternatives = NULL, type = c("score", "lr"))
     colSums((w * A[, j]) * .pc_fns(Dj)$scores(th))
   }, numeric(D$K)))
   Ibb <- fn$hess(th)
-  ## the projection on the logit's information, solved in the diagonally
+  ## the projection on the multinomial logit's information, solved in the diagonally
   ## normalized form; a direction with no information (a separated coefficient
   ## whose probabilities have underflowed) or a singular matrix stops the test
   dI <- abs(diag(Ibb)); dn <- sqrt(pmax(dI, .Machine$double.eps))
@@ -663,7 +699,7 @@ captivity_test <- function(object, alternatives = NULL, type = c("score", "lr"))
   rc <- if (all(is.finite(Ibn))) tryCatch(rcond(Ibn), error = function(e) { .pc_pass_limit(e); 0 }) else 0
   proj <- if (is.finite(rc) && rc >= 1e-12 && all(dI > 1e-12 * max(dI))) tryCatch(solve(Ibn, t(Itb) / dn) / dn, error = function(e) { .pc_pass_limit(e); NULL }) else NULL
   if (is.null(proj))
-    stop("The information matrix of the logit fit is singular (a coefficient at a boundary, such as a separated level, or an unidentified ",
+    stop("The information matrix of the multinomial logit fit is singular (a coefficient at a boundary, such as a separated level, or an unidentified ",
          "design; see the fit's warnings); the score test projects on it and needs it invertible.", call. = FALSE)
   V <- Itt - Itb %*% proj
   dv <- diag(V)
@@ -671,11 +707,11 @@ captivity_test <- function(object, alternatives = NULL, type = c("score", "lr"))
 }
 
 ## captivity_test(type = "lr") (DESIGN.md Phase 4e): for each alternative the
-## constant-share inflated multinomial logit on the logit's own design, by
-## imnl()'s search and once more from the logit embedded at the boundary
+## constant-share inflated multinomial logit on the multinomial logit's own design, by
+## imnl()'s search and once more from the multinomial logit embedded at the boundary
 ## (phi = 1 - plogis(-30)), the higher kept; the likelihood ratio against the
-## logit with the 50:50 chi-square(0) / chi-square(1) reference.
-## * A fit that reaches the logit itself (its captive share collapses, or the
+## multinomial logit with the 50:50 chi-square(0) / chi-square(1) reference.
+## * A fit that reaches the multinomial logit itself (its captive share collapses, or the
 ##   ratio is within max(1e-6, 2e-8 |l|) of zero: the optimizer's shortfall at
 ##   the boundary) gives 0 and p = 1; a share the singular information leaves
 ##   unidentified (a saturated outcome design) is NA, with a note.
@@ -694,8 +730,8 @@ captivity_test <- function(object, alternatives = NULL, type = c("score", "lr"))
   P0 <- .pc_fns(D)$probs(object$theta)$prob; A <- D$avail == 1L
   l0 <- object$loglik; tol <- max(1e-6, 2e-8 * max(1, abs(l0)))
   ## which shares are identified: the score form's rule, on the share's
-  ## information after the logit's coefficients are partialled out (round 7,
-  ## A-2); NULL when the logit's own information is singular
+  ## information after the multinomial logit's coefficients are partialled out (round 7,
+  ## A-2); NULL when the multinomial logit's own information is singular
   idf <- tryCatch(.pc_captivity_info(object, tj)$ok, error = function(e) { .pc_pass_limit(e); NULL })
   rows <- lapply(seq_along(tj), function(i) {
     j <- tj[i]; lab <- D$levels[j]
@@ -716,7 +752,7 @@ captivity_test <- function(object, alternatives = NULL, type = c("score", "lr"))
     r1 <- run()
     failed <- inherits(r1$fit, "error")
     nm <- if (failed) NA_integer_ else as.integer(r1$fit$n_modes %||% 1L)        # the search's count of distinct local maxima
-    ## the logit embedded at the boundary as a further start (as boot_lr_test()
+    ## the multinomial logit embedded at the boundary as a further start (as boot_lr_test()
     ## does), refit from where it ends when that is above the search's result by
     ## more than the tolerance in the ratio's units, or when the search failed
     ## (round 7, I-N4 and C-N6)
@@ -737,7 +773,7 @@ captivity_test <- function(object, alternatives = NULL, type = c("score", "lr"))
     status <- if (cr$statistic == 0) "logit" else if (cr$degenerate) "degenerate" else "interior"
     unid <- if (!is.null(idf)) !idf[i] else isTRUE(f$ill_conditioned)
     note <- switch(status,
-      logit = if (cr$below) "the inflated fit ended below the logit" else if (unid) "the share is not identified (the outcome design absorbs a constant share)" else "",
+      logit = if (cr$below) "the inflated fit ended below the multinomial logit" else if (unid) "the share is not identified (the outcome design absorbs a constant share)" else "",
       degenerate = paste0("the inflated fit is degenerate (", cr$why, if (length(dv) > 3L) ", ..." else "",
                           "); the chi-bar reference does not apply, see boot_lr_test()"),
       interior = if (!isTRUE(f$converged)) "the inflated fit did not converge" else "")
@@ -747,8 +783,8 @@ captivity_test <- function(object, alternatives = NULL, type = c("score", "lr"))
   })
   fits <- do.call(rbind, rows)
   raw <- 2 * (fits$loglik - l0)
-  if (any(fits$note == "the inflated fit ended below the logit", na.rm = TRUE))
-    warning("For ", paste(fits$alternative[fits$note == "the inflated fit ended below the logit"], collapse = ", "), " the inflated fit's log-likelihood is below the logit's; its search did not reach the logit at the boundary.", call. = FALSE)
+  if (any(fits$note == "the inflated fit ended below the multinomial logit", na.rm = TRUE))
+    warning("For ", paste(fits$alternative[fits$note == "the inflated fit ended below the multinomial logit"], collapse = ", "), " the inflated fit's log-likelihood is below the multinomial logit's; its search did not reach the multinomial logit at the boundary.", call. = FALSE)
   stat <- ifelse(fits$status == "failed", NA_real_, ifelse(fits$status == "logit", 0, raw))
   pv <- ifelse(fits$status %in% c("failed", "degenerate"), NA_real_, vapply(stat, function(s) if (is.na(s)) NA_real_ else .pc_chibar_p(s, 0L), numeric(1)))
   out <- data.frame(test = paste0("captive: ", fits$alternative), statistic = stat, df = ifelse(is.na(stat), NA_integer_, 1L),
@@ -959,11 +995,11 @@ boot_pvalue <- function(object, test, B = 199L, cores = 1L, ...) {
 #' space, where neither the chi-square reference of [lr_test()] nor the normal
 #' reference of [vuong()] holds: the inflated model against the multinomial
 #' logit (\eqn{\phi = 1}, where the split coefficients are not identified),
-#' the random-intercept model against the logit (\eqn{\sigma = 0}). It applies
+#' the random-intercept model against the multinomial logit (\eqn{\sigma = 0}). It applies
 #' to the pairs [lr_test()] accepts (a subset of the parameters within one
-#' family, with the nest structure shared for the nested logit, or the logit
+#' family, with the nest structure shared for the nested logit, or the multinomial logit
 #' with the same covariates inside a nested logit, an HEV, or a
-#' random-intercept fit), to the logit inside the inflated multinomial logit,
+#' random-intercept fit), to the multinomial logit inside the inflated multinomial logit,
 #' and to an inflated multinomial logit inside one with more inflated
 #' alternatives; and to two nested [rologit()] fits of the same rankings,
 #' where few rankings per coefficient make the chi-square reference of

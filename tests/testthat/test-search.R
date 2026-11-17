@@ -75,14 +75,20 @@ test_that("ends on a ridge of non-identification are one maximum: a saturated de
   x <- rbinom(600, 1, 0.5)
   p <- cbind(a = 0.5 - 0.2 * x, b = 0.3 + 0.1 * x, c = 0.2 + 0.1 * x)
   d <- data.frame(y = factor(apply(p, 1, function(pr) sample(c("a", "b", "c"), 1, prob = pr))), x = x)
+  ## the information is singular at the maximum itself; where the search
+  ## stopped its reciprocal condition number was below 1e-15 on Windows and
+  ## 2.5e-12 under R 4.5.3 on Linux, so the fit is polished to stationarity
+  ## before the flag is set (DESIGN.md Phase 4g) and is singular on both
   expect_warning(m <- imnl(y ~ x | x, data = d, inflate = c("a", "b")), "not identified by the data")
+  expect_true(m$ill_conditioned); expect_lt(m$rcond, 1e-9)
   ## the summary's rows for the unidentified parameters look like the others,
   ## so its footer says that their estimates and standard errors mean nothing
-  expect_true(m$singular)
-  expect_output(print(summary(m)), "singular (a generalized inverse was used): some parameters are not identified by the data, and their estimates and standard errors are not meaningful", fixed = TRUE)
+  expect_true(m$singular); {
+    expect_output(print(summary(m)), "singular (a generalized inverse was used): some parameters are not identified by the data, and their estimates and standard errors are not meaningful", fixed = TRUE)
+    expect_match(m$search$detail, "ends at other estimates with the same fitted probabilities: the estimates are not identified", fixed = TRUE)
+  }
   expect_identical(m$n_modes, 1L); expect_identical(m$search$type, "maximum")
   expect_identical(m$search$reached, sum(is.finite(m$start_logliks)))
-  expect_match(m$search$detail, "ends at other estimates with the same fitted probabilities: the estimates are not identified", fixed = TRUE)
   ## two of the ends, refitted: other estimates, the same probabilities
   D <- m$design; fn <- polychoice:::.pc_fns(D)
   op1 <- list(par = m$theta, value = -m$loglik, converged = TRUE, max_grad = 0)
@@ -112,4 +118,59 @@ test_that("a reported fit at a boundary with a lower interior maximum: the messa
   expect_identical(sum(m$search$type == "maximum"), 1L)
   expect_lt(max(m$search$loglik[m$search$type == "maximum"]), m$loglik)
   expect_output(print(suppressWarnings(summary(m))), "is not a local maximum; the search from 8 starts also reached 1 below it")
+})
+
+test_that("ill-conditioned maxima within 0.01 in log-likelihood are one point", {
+  ## the ends' types are set by hand (.pc_end_type mocked), on a small fit: two
+  ## ends at different estimates and different fitted probabilities
+  set.seed(4); d <- rmnl(300, beta = cbind(b = c(0.5, -1, 0.8), c = c(-0.3, 0.6, -0.5)))
+  m <- suppressWarnings(suppressMessages(imnl(y ~ x1 + x2 | x1, data = d, inflate = "a")))
+  D <- m$design; fn <- polychoice:::.pc_fns(D); sc <- polychoice:::.pc_scales(D)
+  par2 <- m$theta; par2[1] <- par2[1] + 0.5
+  expect_gt(max(abs(fn$probs(par2)$prob - fn$probs(m$theta)$prob)), 1e-3)
+  op1 <- list(par = m$theta, value = -m$loglik, converged = TRUE, max_grad = 0)
+  rec <- function(detail, gap, rep_detail = detail) {
+    testthat::local_mocked_bindings(.pc_end_type = function(...) list(type = "maximum", detail = detail, se = NULL), .package = "polychoice")
+    op2 <- list(par = par2, value = -m$loglik + gap, converged = TRUE, max_grad = 0)
+    polychoice:::.pc_search_record(D, fn, sc, D$w, list(op1, op2), 1L, op1, list(type = "maximum", detail = rep_detail, se = NULL), 1e-10)$table
+  }
+  ill <- "ill-conditioned information"
+  s <- rec(ill, 0.005)
+  expect_identical(nrow(s), 1L); expect_identical(s$reached, 2L)
+  expect_identical(s$detail, "ill-conditioned information; 1 other ill-conditioned end within 0.01 in log-likelihood, not counted apart")
+  expect_identical(nrow(rec(ill, 0.02)), 2L)                      # further apart than 0.01: two points
+  expect_identical(nrow(rec("", 0.005)), 2L)                      # well-conditioned maxima stay apart
+  expect_identical(nrow(rec(ill, 0.005, rep_detail = "")), 2L)    # and so does an ill-conditioned end beside a well-conditioned point
+})
+
+test_that("a reported fit at a boundary: ill-conditioned maxima below it are one point", {
+  set.seed(4); d <- rmnl(300, beta = cbind(b = c(0.5, -1, 0.8), c = c(-0.3, 0.6, -0.5)))
+  m <- suppressWarnings(suppressMessages(imnl(y ~ x1 + x2 | x1, data = d, inflate = "a")))
+  D <- m$design; fn <- polychoice:::.pc_fns(D); sc <- polychoice:::.pc_scales(D)
+  testthat::local_mocked_bindings(.pc_end_type = function(...) list(type = "maximum", detail = polychoice:::.pc_ill_detail, se = NULL), .package = "polychoice")
+  op1 <- list(par = m$theta, value = -m$loglik, converged = TRUE, max_grad = 0)
+  mk <- function(shift, gap) { p <- m$theta; p[1] <- p[1] + shift; list(par = p, value = -m$loglik + gap, converged = TRUE, max_grad = 0) }
+  ends <- list(op1, mk(0.5, 0.020), mk(1.0, 0.024), mk(1.5, 0.027), mk(2.0, 0.050))
+  s <- polychoice:::.pc_search_record(D, fn, sc, D$w, ends, 1L, op1, list(type = "boundary", detail = "diverging: x", se = NULL), 1e-10)
+  expect_identical(s$table$type, c("boundary", "maximum", "maximum")); expect_identical(s$table$reached, c(1L, 3L, 1L))
+  expect_identical(s$table$detail[1], "diverging: x")
+  expect_identical(s$table$detail[2], "ill-conditioned information; 2 other ill-conditioned ends within 0.01 in log-likelihood, not counted apart")
+  expect_identical(nrow(s$theta), 3L); expect_equal(unname(s$theta[2, 1]), unname(m$theta[1]) + 0.5)   # the highest end's estimates are kept
+})
+
+test_that("the inverse of a singular matrix: the rule is on the normalized matrix, at 1e-13", {
+  inv <- polychoice:::.pc_inverse
+  Q <- qr.Q(qr(matrix(c(2, 1, 0, 1, 3, 1, 0, 1, 4), 3)))
+  mat <- function(small) Q %*% diag(c(1, 0.5, small)) %*% t(Q)
+  a <- inv(mat(1e-11)); expect_false(a$ginv); expect_equal(a$inv, solve(mat(1e-11)), tolerance = 1e-6)
+  b <- inv(mat(1e-15)); expect_true(b$ginv); expect_lt(b$rcond, 1e-13); expect_identical(b$rank, 2L); expect_identical(a$rank, 3L)
+  expect_lt(max(abs(b$inv)), 1e3)                                  # the null direction is dropped, not inverted to 1e15
+  ## badly scaled but regular: the same matrix in other units is not singular
+  s <- c(1, 1e-9, 1e9); M <- mat(0.3) * tcrossprod(s)
+  r <- inv(M); expect_false(r$ginv); expect_equal(r$inv * tcrossprod(s), solve(mat(0.3)), tolerance = 1e-8)
+  ## and a singular one stays singular in other units
+  expect_true(inv(mat(1e-15) * tcrossprod(s))$ginv)
+  ## a statistic's weight matrix: with the tolerance sqrt(eps) a direction at 1e-10 is dropped too, once the matrix is singular
+  Q4 <- qr.Q(qr(matrix(c(2, 1, 0, 1, 1, 3, 1, 0, 0, 1, 4, 1, 1, 0, 1, 5), 4))); M4 <- Q4 %*% diag(c(1, 0.5, 1e-10, 1e-15)) %*% t(Q4)
+  expect_identical(inv(M4)$rank, 3L); expect_identical(inv(M4, gtol = sqrt(.Machine$double.eps))$rank, 2L)
 })

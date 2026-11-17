@@ -1,0 +1,9 @@
+knit applications.Rmd.orig -> C:\Users\bagoz\AppData\Local\pc_chain8\tmp\tmp.JJlxiqXoyM\vig/applications.Rmd
+knit beyond.Rmd.orig -> C:\Users\bagoz\AppData\Local\pc_chain8\tmp\tmp.JJlxiqXoyM\vig/beyond.Rmd
+knit iia.Rmd.orig -> C:\Users\bagoz\AppData\Local\pc_chain8\tmp\tmp.JJlxiqXoyM\vig/iia.Rmd
+knit inflation.Rmd.orig -> C:\Users\bagoz\AppData\Local\pc_chain8\tmp\tmp.JJlxiqXoyM\vig/inflation.Rmd
+Registered S3 method overwritten by 'lme4':
+  method           from
+  na.action.merMod car 
+knit polychoice.Rmd.orig -> C:\Users\bagoz\AppData\Local\pc_chain8\tmp\tmp.JJlxiqXoyM\vig/polychoice.Rmd
+polychoice 0.1.0 from C:/Users/bagoz/AppData/Local/pc_chain8/tmp/tmp.JJlxiqXoyM/lib/polychoice 

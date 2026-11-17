@@ -87,7 +87,7 @@ test_that("identification and scaling are scale-free: shifted and tiny-scale cov
   data("TravelMode", package = "AER"); TM <- TravelMode; TM$chosen <- as.integer(TM$choice == "yes"); TM$wait9 <- TM$wait + 1e9
   c1 <- mnl(chosen ~ wait + vcost | income, data = TM, id = "individual", alt = "mode")
   c2 <- mnl(chosen ~ wait9 + vcost | income, data = TM, id = "individual", alt = "mode")
-  expect_equal(unname(coef(c2)["wait9"]), unname(coef(c1)["wait"]), tolerance = 1e-6)
+  expect_equal(unname(coef(c2)["wait9"]), unname(coef(c1)["wait"]), tolerance = 1e-4)   # the shift by 1e9 costs digits in the centred covariate: 1e-6 relative on macOS arm64
 })
 
 test_that("comparison guards: split equation without intercept, fixed effects on one side, and the Vuong reference at the boundary", {

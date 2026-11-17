@@ -48,7 +48,13 @@ is at most the chi-square quantile on one degree of freedom (the full
 model's penalty throughout). Under separation they are asymmetric and wider
 than the Wald intervals on the side towards which the maximum-likelihood
 estimate runs off. A limit not reached within 50 standard errors is \code{NA},
-with a warning.
+with a warning. With few cases per coefficient, and under separation, the
+penalized likelihood with one coefficient held fixed can have several local
+maxima. Each limit is therefore checked by maximizing afresh at it, from the
+estimate and from zero; a limit at which a higher maximum turns up (after a
+second search that takes the highest of the three starts at every point),
+or at which the maximization does not converge, is \code{NA} with a warning,
+since the number found would not be a limit of the interval.
 }
 \references{
 Heinze, G. and Schemper, M. (2002). A solution to the problem of separation

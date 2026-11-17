@@ -247,6 +247,7 @@
   res$type <- if (all(sep) && res$n_zero == 0L) "complete" else "quasi-complete"
   res$terms <- D$par_names[rowSums(Vn^2) > 1e-10]
   res$direction <- stats::setNames(vt, D$par_names)
+  res$span <- qr.Q(qr(Vn / sc))                               # an orthonormal basis of the separating directions' span, in theta's coordinates
   res$cases <- D$case_id[sort(unique(P[sep, 1L]))]
   res$n_separated <- sum(sep)
   res$sep_pairs <- P[sep, , drop = FALSE]                    # (case, above, below) of the separated comparisons

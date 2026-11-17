@@ -57,7 +57,7 @@ space and the chi-square reference does not hold exactly. For the
 random-intercept model (\eqn{\sigma = 0}) the null distribution is a mixture
 of chi-squares with fewer degrees of freedom, so the reported p-value is
 conservative and the test can be used as such (a message says so). For the
-inflated model against the logit (\eqn{\phi = 1}) the split-equation slopes
+inflated model against the multinomial logit (\eqn{\phi = 1}) the split-equation slopes
 are not identified under the null, so no simple correction exists: the
 function refuses that pair; \code{\link[=boot_lr_test]{boot_lr_test()}} calibrates it by simulation
 (the normal reference of \code{\link[=vuong]{vuong()}} is not justified there either). The
@@ -67,8 +67,8 @@ share): its captive odds at zero are a regular boundary point, and the
 reference is the 50:50 mixture of chi-square(q) and chi-square(q + 1), q
 the further restrictions (Self and Liang 1987), as in
 \code{captivity_test(type = "lr")}. The
-multinomial probit does not nest the logit: use \code{\link[=vuong]{vuong()}}. Two fits of the
-same family other than the logit (two HEV, nested-logit, probit, or
+multinomial probit does not nest the multinomial logit: use \code{\link[=vuong]{vuong()}}. Two fits of the
+same family other than the multinomial logit (two HEV, nested-logit, multinomial probit, or
 random-intercept fits) are accepted when the restricted parameters are a
 subset of the full ones and the fits use the same quadrature nodes or
 simulation draws. The function also refuses fits with different choice

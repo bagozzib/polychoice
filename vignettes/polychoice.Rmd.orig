@@ -245,13 +245,33 @@ head(broom::tidy(m, conf.int = TRUE), 4)
 broom::glance(m)
 ```
 
+With multiply imputed data, fit the model on each completed data set and
+pass the list of fits to `mice::pool()`, which combines them by Rubin's
+rules through the same methods. The estimators take the data as an
+argument, so `with(imp, mnl(...))` does not work. The fits' flags are not
+pooled, so check each fit first. And give `pool()` the complete-data
+degrees of freedom, cases minus parameters: left to itself, mice 3.19
+counts one residual per case and alternative. The pooled statistic tests
+each parameter against zero (`?tidy.choicemodel`).
+
+```{r mice, eval = requireNamespace("mice", quietly = TRUE)}
+set.seed(1)
+dm <- rmnl(500, beta = cbind(b = c(0.5, -1, 0.8), c = c(-0.3, 0.6, -0.5)))
+dm$x1[sample(500, 80)] <- NA
+imp <- mice::mice(dm, m = 5, printFlag = FALSE, seed = 1)
+fits <- lapply(1:5, function(i) mnl(y ~ x1 + x2, data = mice::complete(imp, i)))
+all(vapply(fits, function(f) f$converged && !f$boundary && !f$singular, logical(1)))
+pooled <- mice::pool(fits, dfcom = nobs(fits[[1]]) - length(coef(fits[[1]])))
+summary(pooled)[, c("term", "estimate", "std.error", "statistic", "df", "p.value")]
+```
+
 ## Where next
 
 * *The inflated multinomial logit* fits the model of Bagozzi and
   Marchetti (2017) and reproduces the published applications.
 * *Testing IIA and specification* covers `iia_tests()` and the further tests,
   with the size study that motivates the recommendations.
-* *Beyond IIA* covers the nested logit, HEV, probit, random intercepts, and
+* *Beyond IIA* covers the nested logit, HEV, multinomial probit, random intercepts, and
   the fixed-effects tools.
 * *Seven published analyses* works through the example datasets drawn from
   replication archives (`sanctions`, `fluvax`, `bes1987`, `defection`,

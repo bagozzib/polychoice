@@ -80,16 +80,13 @@ tests under `tests/testthat/` and the scripts in `verification/`, which
 
 ## 4. The release build's frozen run, with the size study of the IIA tests
 
-Frozen run of polychoice 0.1.0, 2026-11-10 to 11-11, build beb30c4880b2, run folder
-verification/runs/beb30c4880b2. A restart of the machine stopped the run on 2026-11-10 after
-jackknife_gate_mc.R. It was resumed the next day on the same commit and build (the build id is the
-fingerprint of the package's files, checked again before resuming), from jackknife_gate_holdout.R on;
-status.txt has one header line per segment.
+Frozen run of polychoice 0.1.0, 2026-11-15 to 11-16, build f46ebb007be6, run folder
+verification/runs/f46ebb007be6. The build id is the fingerprint of the package's files
+(fingerprint.txt in the run folder); status.txt has one header line per segment of the run.
 
-* **Tests and check.** 1,343 expectations, 0 failed, warnings, errors or skipped. R CMD check
-  --as-cran: 0 errors, 0 warnings, 3 NOTEs (a new submission whose GitHub URLs returned 404 before the
-  repository was public; pandoc and V8 missing locally). The precomputed vignettes knitted again on the
-  build reproduce the shipped ones.
+* **Tests and check.** 1,454 expectations, 0 failed, warnings, errors or skipped. R CMD check
+  --as-cran: 0 errors, 0 warnings, 3 NOTEs (a new submission; pandoc and V8 missing locally). The
+  precomputed vignettes knitted again on the build reproduce the shipped ones.
 * **Size study of the IIA tests** (size_check_iia.R, q1_covariance_check.R; the multinomial logit, J = 3, four
   covariates, n = 1,000, 300 replications). Rejection at 0.05 / 0.10: Hausman-McFadden difference form
   0.077 / 0.163, joint form 0.020 / 0.047; Small-Hsiao with one split 0.040 / 0.047, ten-split median

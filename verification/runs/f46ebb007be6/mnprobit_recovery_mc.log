@@ -1,0 +1,43 @@
+n = 1500, rep 25 elapsed 29 s 
+n = 1500, rep 50 elapsed 57 s 
+n = 1500, rep 75 elapsed 83 s 
+n = 1500, rep 100 elapsed 110 s 
+n = 1500, rep 125 elapsed 137 s 
+n = 1500, rep 150 elapsed 165 s 
+n = 1500, rep 175 elapsed 195 s 
+n = 1500, rep 200 elapsed 223 s 
+n = 3000, rep 25 elapsed 283 s 
+n = 3000, rep 50 elapsed 351 s 
+n = 3000, rep 75 elapsed 414 s 
+n = 3000, rep 100 elapsed 479 s 
+n = 3000, rep 125 elapsed 541 s 
+n = 3000, rep 150 elapsed 604 s 
+n = 3000, rep 175 elapsed 664 s 
+n = 3000, rep 200 elapsed 728 s 
+
+mnprobit recovery: 200 of 200 replications, n = 1500; converged 200, boundary 0 
+parameter           truth     mean     bias bias/mcse    MC sd  mean se  cover95 
+b:(Intercept)       0.300    0.297   -0.003     -0.71    0.058    0.058    0.950 
+b:x1               -0.600   -0.609   -0.009     -1.92    0.063    0.060    0.920 
+b:x2                0.500    0.507   +0.007      1.68    0.061    0.056    0.935 
+c:(Intercept)      -0.200   -0.214   -0.014     -2.58    0.078    0.078    0.955 
+c:x1                0.400    0.409   +0.009      1.60    0.077    0.072    0.940 
+c:x2               -0.300   -0.307   -0.007     -1.25    0.074    0.067    0.920 
+w1                  1.000    1.015   +0.015      3.44    0.062    0.062    0.965 
+cov:c,b             0.600    0.600   +0.000      0.03    0.126    0.120    0.930 
+var:c               1.500    1.550   +0.050      2.53    0.279    0.267    0.950 
+
+mnprobit recovery: 200 of 200 replications, n = 3000; converged 200, boundary 0 
+parameter           truth     mean     bias bias/mcse    MC sd  mean se  cover95 
+b:(Intercept)       0.300    0.298   -0.002     -0.69    0.045    0.041    0.935 
+b:x1               -0.600   -0.610   -0.010     -3.37    0.042    0.042    0.970 
+b:x2                0.500    0.505   +0.005      1.85    0.042    0.039    0.945 
+c:(Intercept)      -0.200   -0.204   -0.004     -0.87    0.059    0.054    0.930 
+c:x1                0.400    0.396   -0.004     -1.03    0.051    0.050    0.950 
+c:x2               -0.300   -0.299   +0.001      0.26    0.051    0.046    0.905 
+w1                  1.000    1.002   +0.002      0.66    0.043    0.043    0.935 
+cov:c,b             0.600    0.601   +0.001      0.14    0.086    0.083    0.945 
+var:c               1.500    1.512   +0.012      0.86    0.200    0.184    0.945 
+seconds: 728 
+Session: R version 4.6.1 (2026-06-24 ucrt)  polychoice 0.1.0 from C:/Users/bagoz/AppData/Local/pc_chain8/tmp/tmp.JJlxiqXoyM/lib/polychoice 
+build: f46ebb007be6 

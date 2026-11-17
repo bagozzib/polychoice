@@ -48,7 +48,7 @@
   }
   adj <- function(th) {
     e <- eq(info(th))
-    Ii <- tryCatch(solve(e$Is), error = function(x) { .pc_pass_limit(x); MASS::ginv(e$Is) }) / tcrossprod(e$d)
+    Ii <- .pc_inverse(e$Is)$inv / tcrossprod(e$d)
     do.call(pc_firth_adj_cpp, c(list(as.numeric(th)), a, list(Ii)))
   }
   list(lli = f$lli,
@@ -86,6 +86,18 @@
   }
   if (!is.finite(v)) return(out)
   op2 <- tryCatch(.pc_optimize(fn, s, scale, maxit, reltol), error = function(e) { .pc_pass_limit(e); NULL })
+  ## a run from far out along a separating direction can stop short of a
+  ## maximum (the information is close to singular there). It is then run
+  ## again from the point of the segment from that endpoint to zero where
+  ## the penalized objective is highest, and the better run is kept
+  if (!is.null(op2) && is.finite(op2$value) && !isTRUE(op2$converged)) {
+    tt <- 2^-(1:30)
+    vv <- vapply(tt, function(t) tryCatch(fn$nll(t * s), error = function(e) { .pc_pass_limit(e); NA_real_ }), numeric(1))
+    if (any(is.finite(vv))) {
+      op3 <- tryCatch(.pc_optimize(fn, tt[which.min(vv)] * s, scale, maxit, reltol), error = function(e) { .pc_pass_limit(e); NULL })
+      if (!is.null(op3) && is.finite(op3$value) && op3$value <= op2$value) op2 <- op3
+    }
+  }
   if (is.null(op2) || !is.finite(op2$value)) return(out)
   out$vals <- c(op$value, op2$value)
   if (isTRUE(op$converged) && isTRUE(op2$converged) && max(abs((op$par - op2$par) * scale)) > 1e-3 &&
@@ -159,45 +171,49 @@
 ## bracketed by stepping out from the estimate in multiples of the Wald
 ## standard error (1, 2, 4, ... up to 50) and found by uniroot(); NA with a
 ## warning when no limit lies within 50 standard errors.
+##
+## The restricted maximum at a point is first taken along a path of warm
+## starts from the estimate. The restricted penalized likelihood can have
+## several local maxima (few cases per coefficient, separation), and a path
+## can follow a lower one, so a limit is checked by maximizing there afresh
+## from the estimate and from zero. Where that finds a higher maximum the
+## side is searched again with every point's maximum the highest of the
+## three starts. A limit is reported when the highest restricted maximum
+## found at it converged and reproduces the quantile; otherwise it is NA with a
+## warning, since a number there would be a point on some path and not a
+## limit (DESIGN.md Phase 4g).
 .pc_firth_profile <- function(object, parm, level) {
   D <- object$design; fn <- .pc_fns(D); scale <- object$scale
   th <- object$theta; pn <- names(object$coefficients)
   q <- stats::qchisq(level, 1)
   se <- if (is.null(object$vcov_internal)) rep(NA_real_, length(th)) else sqrt(pmax(diag(object$vcov_internal), 0))
-  missed <- character(0); unconv <- character(0)
+  missed <- character(0); unverified <- character(0)
   one <- function(nm) {
     r <- match(nm, pn); free <- setdiff(seq_along(th), r)
     warm <- th
-    ## the profile deviance minus the quantile at cval, the restricted maximum
-    ## from the previous point's solution (`cold`: from the estimate and from
-    ## zero, keeping the higher). Far out along a separated coefficient the
-    ## information underflows, the penalty's log-determinant is -Inf and the
-    ## penalized log-likelihood -Inf: that point is beyond the limit (a large
-    ## positive value), not a failure of the search (DESIGN.md Phase 4d)
-    solve_at <- function(cval, cold = FALSE) {
+    ## the restricted maximizations at cval: from the previous point's solution
+    ## (`warm`), and with `cold` also from the estimate and from zero. Far out
+    ## along a separated coefficient the information underflows, the penalty's
+    ## log-determinant is -Inf and the penalized log-likelihood -Inf: that
+    ## point is beyond the limit (a large positive value), not a failure of
+    ## the search (DESIGN.md Phase 4d)
+    solve_at <- function(cval, starts = c("warm", "cold")) {
       full <- function(b) { t <- numeric(length(th)); t[free] <- b; t[r] <- cval; t }
       fnr <- list(nll = function(b) fn$nll(full(b)), grad = function(b) fn$grad(full(b))[free],
                   info = function(b) fn$info(full(b))[free, free, drop = FALSE])
-      ops <- if (cold) list(.pc_optimize(fnr, th[free], scale[free], 1000L, 1e-10), .pc_optimize(fnr, numeric(length(free)), scale[free], 1000L, 1e-10))
-             else list(.pc_optimize(fnr, warm[free], scale[free], 1000L, 1e-10))
-      op <- ops[[which.min(vapply(ops, function(o) if (is.finite(o$value)) o$value else Inf, numeric(1)))]]
-      if (!cold && is.finite(op$value)) warm <<- full(op$par)
-      v <- 2 * (object$loglik_penalized + op$value) - q
-      list(v = if (identical(v, Inf)) 1e10 else v, converged = isTRUE(op$converged))
-    }
-    dev <- function(cval) solve_at(cval)$v
-    ## a limit is the root of the deviance along the path of warm starts; it
-    ## is checked by solving there afresh. A restricted maximum that does not
-    ## converge from either start, or a deviance there away from the quantile
-    ## (a bracketing point whose maximum stopped short, so that the root lies
-    ## farther out), is reported: the interval may be too narrow
-    verify <- function(root) {
-      s <- tryCatch(solve_at(root, cold = TRUE), error = function(e) { .pc_pass_limit(e); NULL })
-      if (is.null(s) || !s$converged || abs(s$v) > 1e-3) unconv <<- c(unconv, nm)
-      root
+      s0 <- c(if ("warm" %in% starts) list(warm[free]), if ("cold" %in% starts) list(th[free], numeric(length(free))))
+      ops <- lapply(s0, function(s) tryCatch(.pc_optimize(fnr, s, scale[free], 1000L, 1e-10), error = function(e) { .pc_pass_limit(e); list(value = Inf, converged = FALSE) }))
+      vals <- vapply(ops, function(o) if (is.finite(o$value)) o$value else Inf, numeric(1))
+      op <- ops[[which.min(vals)]]
+      if ("warm" %in% starts && is.finite(op$value)) warm <<- full(op$par)
+      v <- 2 * (object$loglik_penalized + min(vals)) - q
+      list(v = if (!is.finite(v)) 1e10 else v, converged = isTRUE(op$converged))
     }
     step <- if (is.finite(se[r]) && se[r] > 0) se[r] else max(1, abs(th[r]))
-    lim <- function(side) {
+    ## one side's limit: list(root, at) with `at` the deviance and convergence
+    ## of the restricted maximum there, or NULL when no limit is bracketed
+    lim <- function(side, starts) {
+      dev <- function(cval) solve_at(cval, starts)$v
       lo <- th[r]; g_lo <- -q; warm <<- th
       for (k in c(1, 2, 4, 8, 16, 32, 50)) {
         hi <- th[r] + side * k * step
@@ -211,21 +227,39 @@
           root <- tryCatch(stats::uniroot(function(cv) dev(cv), sort(c(lo, hi)), f.lower = if (side > 0) g_lo else g_hi,
                                           f.upper = if (side > 0) g_hi else g_lo, tol = 1e-6 * step)$root,
                            error = function(e) { .pc_pass_limit(e); NA_real_ })
-          if (is.finite(root)) return(verify(root))
-          break
+          if (!is.finite(root)) break
+          return(list(root = root, at = tryCatch(solve_at(root, starts), error = function(e) { .pc_pass_limit(e); NULL })))
         }
         lo <- hi; g_lo <- g_hi
       }
-      missed <<- c(missed, nm)
+      NULL
+    }
+    ## pass 1 follows the warm path; at its limit the maximum is taken again
+    ## from all three starts. A higher maximum there (the path was on a lower
+    ## branch) sends the side to pass 2, where every point's maximum is the
+    ## highest of the three starts. A limit is reported when the highest
+    ## maximum found at it converged and reproduces the quantile; pass 2 has
+    ## no further check, since its maxima are already the highest found
+    side_limit <- function(side) {
+      l <- lim(side, "warm")
+      if (is.null(l)) { missed <<- c(missed, nm); return(NA_real_) }
+      at <- tryCatch(solve_at(l$root, c("warm", "cold")), error = function(e) { .pc_pass_limit(e); NULL })
+      if (!is.null(at) && isTRUE(at$converged) && abs(at$v) <= 1e-3) return(l$root)
+      if (!is.null(at) && at$v < -1e-3) {
+        l <- lim(side, c("warm", "cold"))
+        if (!is.null(l) && !is.null(l$at) && isTRUE(l$at$converged) && abs(l$at$v) <= 1e-3) return(l$root)
+      }
+      unverified <<- c(unverified, nm)
       NA_real_
     }
-    c(lim(-1), lim(1))
+    c(side_limit(-1), side_limit(1))
   }
   ci <- t(vapply(parm, one, numeric(2)))
   if (length(missed)) warning("No profile limit within 50 standard errors for ", paste(unique(missed), collapse = ", "),
                               ": the penalized likelihood is too flat there (NA).", call. = FALSE)
-  if (length(unconv)) warning("At a profile limit of ", paste(unique(unconv), collapse = ", "), " the restricted penalized maximum did not converge ",
-                              "or did not reproduce the limit; the interval may be too narrow.", call. = FALSE)
+  if (length(unverified)) warning("A profile limit of ", paste(unique(unverified), collapse = ", "), " could not be verified and is not reported (NA): ",
+                                  "at the point found, the restricted penalized maximum did not converge or does not reproduce the limit ",
+                                  "(the restricted penalized likelihood has several local maxima).", call. = FALSE)
   ci
 }
 

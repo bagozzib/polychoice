@@ -1096,7 +1096,7 @@
   list(X = X, W = W, Z = Z, off = off, avail = avail, fe_off = fe_off, n = n, ci = ci, ji = ji, case_id = case_id)
 }
 
-## the constant-share inflated multinomial logit of alternative k on a logit fit's own
+## the constant-share inflated multinomial logit of alternative k on a multinomial logit fit's own
 ## design (DESIGN.md Phase 4e): the split block, one intercept, added after the
 ## outcome and generic blocks; the same cases, weights, offsets and choice sets
 .pc_inflate_design <- function(D, k) {

@@ -48,8 +48,8 @@ LazyData: true
 Depends: R (>= 4.0)
 Imports: Rcpp, stats, Formula, MASS, numDeriv, methods, parallel, utils, lpSolveAPI
 LinkingTo: Rcpp
-Suggests: nnet, mlogit, dfidx, AER, mvtnorm, lme4, testthat (>= 3.1.5), knitr, rmarkdown, broom,
-    modelsummary, texreg, brglm2, logistf, coxphf, detectseparation, survival
+Suggests: nnet, mlogit, dfidx, AER, mvtnorm, lme4, testthat (>= 3.2.0), knitr, rmarkdown, broom,
+    modelsummary, texreg, brglm2, logistf, coxphf, detectseparation, survival, mice
 VignetteBuilder: knitr
 Roxygen: list(markdown = TRUE, load = "source")
 URL: https://github.com/bagozzib/polychoice

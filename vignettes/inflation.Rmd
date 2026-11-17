@@ -256,8 +256,8 @@ coefficients, or a split equation that puts every case in one regime), a
 saddle, or not converged. `m1$search` lists the distinct points, and the
 number of distinct local maxima is reported, with a message when there is
 more than one; the highest found need not be the global maximum. Then
-`crosscheck = TRUE` runs the same search under the probit split and polishes
-the logit from its rescaled estimates (which about doubles the time), and
+`crosscheck = TRUE` runs the same search under the other split link and polishes
+the fit under its own link from the rescaled estimates (which about doubles the time), and
 `start` probes other basins (a row of `m1$search_theta` refits that point).
 
 
@@ -323,7 +323,7 @@ higher, at points where the Kerry and Bush coefficients diverge together
 (the higher at -542.851): the outcome stage predicts 21 abstainers with
 certainty, and the split equation puts the other 84 in the captive regime.
 There the likelihood rises towards a supremum at infinity, a separation
-within the mixture that the logit's data do not show (see `?imnl`). The
+within the mixture that the multinomial logit's data do not show (see `?imnl`). The
 multistart does not reach that region, and the published fit is the highest
 interior maximum. The raw Vuong statistic computed here is 1.68 (positive values
 favour the first model, the inflated one; two-sided p = 0.09): it leans
@@ -333,7 +333,7 @@ leans the other way, and the information criteria disagree with each other,
 as in the published analysis, which reports mixed support for inflation in
 these data. Which row to read: the raw statistic is Vuong's, the AIC and BIC
 rows are his corrections for the difference in parameters; but since the
-logit is the boundary case of the inflated model, none of them has a valid
+multinomial logit is the boundary case of the inflated model, none of them has a valid
 normal reference here, and `boot_lr_test(p0, p1)` gives the calibrated
 p-values.
 
@@ -341,12 +341,12 @@ p-values.
 
 Whether the multinomial logit leaves room for routine choosers can be asked
 before any inflated model is fit. `captivity_test()` is the score test of
-the logit against the dogit with a constant captive share for each
-alternative, computed from the logit fit alone: its joint statistic is the
+the multinomial logit against the dogit with a constant captive share for each
+alternative, computed from the multinomial logit fit alone: its joint statistic is the
 Lagrange multiplier test of Tse (1987), and the one-sided statistic for each
 alternative is added here. The score of a case for
 alternative \(j\) is \(1\{y_i = j\}/P_{ij} - 1\): it grows when the cases
-that chose \(j\) are ones the logit thought unlikely to, which is what
+that chose \(j\) are ones the multinomial logit thought unlikely to, which is what
 captive choosers produce. Each alternative gets a one-sided z statistic
 (captive shares cannot be negative), and a joint test follows.
 
@@ -362,7 +362,7 @@ captivity_test(m0)
 #>                      joint     3.859  4  0.4254
 ```
 
-Because the logit is an ordinary boundary point of the dogit's captivity
+Because the multinomial logit is an ordinary boundary point of the dogit's captivity
 parameters, the score test is regular there, unlike the comparison with the
 inflated fit. Its weights \(1/P_{ij}\) make it heavy-tailed when some fitted
 probabilities are small; `boot_pvalue(m0, captivity_test)` calibrates it by
@@ -448,7 +448,7 @@ has fewer inflated alternatives, by `boot_lr_test()`.
 The model with fewer inflated alternatives is the boundary at which a
 captive share is zero, so `boot_lr_test(imnl(y ~ x1 + x2 | z1, data = dc,
 inflate = "a"), mc)` compares the two by simulation, as it compares the
-inflated model with the logit.
+inflated model with the multinomial logit.
 
 The split covariate here, `z1`, is not in the outcome equations. In the
 simulation reported in `?imnl`, splitting on an outcome covariate instead

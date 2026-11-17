@@ -16,7 +16,10 @@ iia_tests(
 \item{object}{A fitted \code{\link[=mnl]{mnl()}} model with at least three alternatives.
 A fit with diverging coefficients (separation) draws a warning: the
 contrasts then compare estimates that do not exist and can reject
-spuriously.}
+spuriously.
+The Fok-Paap \eqn{Q_1} row leaves the diverging directions out of its
+comparison, with its degrees of freedom reduced, and the printed table
+says so (see \code{\link[=fp_tests]{fp_tests()}}).}
 
 \item{drop}{Alternatives for the Hausman-McFadden and Small-Hsiao tests;
 default all.}

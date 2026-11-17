@@ -83,7 +83,7 @@ residuals.choicemodel <- function(object, type = c("response", "pearson"), ...) 
 #'   `block` of every row (`"outcome"`, `"generic"`, `"fixed effect"`,
 #'   `"inflation"`, `"nest"`, `"scale"`, `"covariance"`, `"random intercept"`),
 #'   and the fit statistics. The z statistics of the inclusive-value and scale
-#'   blocks test the value 1 (the multinomial logit); those of the probit
+#'   blocks test the value 1 (the multinomial logit); those of the multinomial probit
 #'   covariance block test the values under independent, identically
 #'   distributed errors (variances 1, covariances 0.5 under the normalization
 #'   of the first variance to 1); the random-intercept
@@ -107,7 +107,7 @@ summary.choicemodel <- function(object, ...) {
   v[is.finite(v) & v <= 0] <- NA_real_                                           # a negative or exactly zero variance (an indefinite or generalized inverse): no standard error
   se <- sqrt(pmax(v, 0))
   ## the hypothesis of each z test: 1 for inclusive values and scales (the
-  ## logit); the iid values for the probit covariance ((I + 11') / 2: variances
+  ## multinomial logit); the iid values for the multinomial probit covariance ((I + 11') / 2: variances
   ## 1, covariances 0.5); 0 otherwise
   null <- ifelse(object$blocks %in% c("nest", "scale"), 1, 0)
   cv <- object$blocks == "covariance"
@@ -214,7 +214,13 @@ print.summary.choicemodel <- function(x, digits = max(3L, getOption("digits") - 
 #' model's penalty throughout). Under separation they are asymmetric and wider
 #' than the Wald intervals on the side towards which the maximum-likelihood
 #' estimate runs off. A limit not reached within 50 standard errors is `NA`,
-#' with a warning.
+#' with a warning. With few cases per coefficient, and under separation, the
+#' penalized likelihood with one coefficient held fixed can have several local
+#' maxima. Each limit is therefore checked by maximizing afresh at it, from the
+#' estimate and from zero; a limit at which a higher maximum turns up (after a
+#' second search that takes the highest of the three starts at every point),
+#' or at which the maximization does not converge, is `NA` with a warning,
+#' since the number found would not be a limit of the interval.
 #'
 #' @param object A `"choicemodel"` fit.
 #' @param parm Parameters (names or positions); default all.
@@ -377,7 +383,7 @@ update.choicemodel <- function(object, formula., ..., evaluate = TRUE) {
 #' Draws `nsim` outcome vectors from the fitted model (holding the covariates
 #' fixed): the parametric bootstrap of the model. For every family but the
 #' random-intercept one the draw of a case is from its fitted probabilities of
-#' the observed alternatives (the GHK probabilities of a probit case are
+#' the observed alternatives (the GHK probabilities of a multinomial probit case are
 #' renormalized to one); for [remnl()] one intercept vector is drawn per unit
 #' and the unit's cases are then drawn given it, so the within-unit dependence
 #' of the model is reproduced. Frequency weights are left as they are: one

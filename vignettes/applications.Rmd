@@ -109,8 +109,8 @@ first_difference(mf, "condition", from = "us_alone", to = "us_china")
 
 At the covariate profile, naming China as the partner lowers the probability
 of a yes by about eight points. A "don't know" can mix the undecided with
-respondents who give it whatever is asked. The score test of the logit
-against captive choosers, computed from the logit fit alone, does not reject
+respondents who give it whatever is asked. The score test of the multinomial logit
+against captive choosers, computed from the multinomial logit fit alone, does not reject
 here, and neither does its likelihood-ratio form (a constant captive share of
 "don't know" gains 0.41 in log-likelihood, p = 0.18). The inflated multinomial
 logit with "don't know" as
@@ -145,7 +145,7 @@ compare_models(MNL = mf, inflated = mi)
 
 The inflated fit's search found two distinct maxima (`mi$n_modes`, with a
 message), and the highest is reported; one more search ended where a split
-coefficient diverges, which `mi$search` lists as a boundary. The logit is the boundary of the
+coefficient diverges, which `mi$search` lists as a boundary. The multinomial logit is the boundary of the
 inflated model, so `boot_lr_test(mf, mi)` gives the calibrated comparison
 (not run here: every replicate refits the inflated model).
 
@@ -220,8 +220,8 @@ lr_test(mb, mn)
 Its inclusive-value parameter, 0.81, lies inside the unit interval that
 random-utility maximization requires (the other two nestings of the three
 parties give values above 1), and the likelihood-ratio test prefers it to the
-logit at the 0.05 level: Labour and Alliance voters treat the two parties as
-closer substitutes than the logit allows.
+multinomial logit at the 0.05 level: Labour and Alliance voters treat the two parties as
+closer substitutes than the multinomial logit allows.
 
 ## Who leaves an insurgency: separation
 

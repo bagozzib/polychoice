@@ -1,0 +1,13 @@
+Parametric bootstrap under the restricted model, 199 replicates; the LR's asymptotic p-value is the 50:50 chi-square mixture (a constant captive share) 
+                                                  test statistic df  p.value
+  LR (parametric bootstrap under the restricted model)    20.951  1 2.36e-06
+ Vuong, raw (full vs restricted; parametric bootstrap)     1.817 NA       NA
+ p.boot
+  0.005
+  0.140
+199 replicates (14.3 min, 6 workers): share of LR = 0 (below 1e-6) 0.608 (the mixture: 0.5) 
+quantiles 0.90 / 0.95 / 0.99: 1.55 / 2.20 / 4.76 (the mixture: 1.64 / 2.71 / 5.41) 
+rejection at the mixture's critical values: 0.101 / 0.040 / 0.010 (nominal 0.10 / 0.05 / 0.01) 
+observed LR 20.951; asymptotic (mixture) p 2.36e-06; bootstrap p 0.0050; replicates with a full refit below the restricted one: 0 
+polychoice 0.1.0 from C:/Users/bagoz/AppData/Local/pc_chain8/tmp/tmp.XtLnYC8tF6/lib/polychoice 
+build: f46ebb007be6 

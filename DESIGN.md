@@ -1450,6 +1450,24 @@ merge two maxima less than 0.1 apart.
   - `"maximum"` otherwise (an ill-conditioned information is noted in
     `detail`).
   The reported point takes its type from the fit's own flags.
+* **Amendment (2026-11-12, author's decision, before release).** Maxima
+  whose information is ill-conditioned (reciprocal condition number below
+  1e-9, or singular) are one point when their log-likelihoods differ by
+  less than 0.01, whatever their estimates and fitted probabilities; the
+  point's `detail` counts the ends that joined it that way. Case: Eifert,
+  Miguel and Posner (2010) Table 4, inflated probit split, a weighted fit
+  with 105 parameters at a boundary: four ends typed `"maximum"` lay
+  within 6e-05 of one another in log-likelihood among boundary and saddle
+  ends at the same level, and the message reported four distinct local
+  maxima (verification/probes/2026-11-12/search_eifert_t4_probit.txt). A
+  nearly flat direction lets the search stop anywhere along it, so neither
+  the estimates nor the probabilities show that such ends are different
+  maxima. Two distinct ill-conditioned maxima at one height would be
+  counted once.
+  The window is measured from the point's highest end, and only that end's
+  estimates are kept in `search_theta`. An end whose reciprocal condition
+  number is just above 1e-9 is not of this kind, so two ends on one flat
+  region with condition numbers either side of 1e-9 stay two points.
 * **The count.** `n_modes` is the number of points of type `"maximum"`; 0
   when there is none (a separated logit, a fit at a boundary with no
   interior maximum found). A penalized fit keeps its count of the two runs'
@@ -1467,6 +1485,162 @@ merge two maxima less than 0.1 apart.
   they are identical to build 9446ac9410f9 bit for bit. The classification
   costs one Hessian per point other than the reported one (0.1 to 0.3 s on
   the bundled data, against fits of 8 to 20 s).
+
+### Phase 4g (2026-11-15, author's decision): the items held for 0.1.1, done before the release
+
+Why. The rerun of the research note's scripts on build 8dce1271fc30 and the
+comparisons of 2026-11-13 left a list of known weaknesses (release
+checklist, "For 0.1.1"). The author's decision of 2026-11-15 is to fix them
+before the first release. Each rule below is the one rule for its case.
+
+1. **Profile limits that do not verify are NA** (`confint()` on a penalized
+   fit). The restricted penalized likelihood, with one coefficient held
+   fixed, can have several local maxima when there are few cases per
+   coefficient or the data are separated: on Poast's (2007) unreported model
+   for 1981 and earlier, winter, with `cius` (6 events, 11 coefficients) the
+   package's optimizer from the estimate, the same from zero, and a BFGS
+   search on a likelihood coded from scratch reach three different restricted
+   maxima at the same point, and the deviance along a path of warm starts is
+   not monotone. A number found there is a point on some path and not a
+   limit. The search first follows the path of warm starts, as before. At
+   the limit it finds, the restricted maximum is taken again from three
+   starts (the path's solution, the estimate, zero). Where the highest of
+   them converged and reproduces the quantile to 1e-3, the limit is
+   reported. Where one of them is higher than the path's (the path was on a
+   lower branch), the side is searched again with every point's maximum the
+   highest of the three starts, and its limit is reported when that maximum
+   converged and reproduces the quantile; the second search has no further
+   check, since its maxima are already the highest found. Otherwise the
+   limit is NA, with a warning that names the coefficient. The earlier text
+   ("the interval may be too narrow") is withdrawn: restricted maxima found
+   by other means put the unverified limits on either side.
+   (Adversarial review of 2026-11-15, finding 3: the first version checked
+   the second search against starts it already contained, and did not
+   search again when the path's own solution at the limit was the higher
+   one.)
+2. **The second start of a penalized fit** (Phase 4b). From the endpoint of
+   the maximum-likelihood fit of completely separated data the run can stop
+   short of a maximum (Poast, 1981 and earlier, summer, without `cius`:
+   largest scaled gradient 6.2 on build beb30c4880b2 and 0.19 on
+   8dce1271fc30). A run that does not converge is run again from the point of
+   the segment from that endpoint to zero (at 2^-1, ..., 2^-30 of the way)
+   where the penalized objective is highest, and the run with the higher
+   penalized likelihood is kept.
+3. **The Fok-Paap tests do not depend on the covariates' units.**
+   - Q2: the instruments are put on a canonical scale before the moments are
+     formed. The case-specific covariates x are replaced by sqrt(n) Q of the
+     QR decomposition of x over all cases (columns first scaled to unit
+     length), and the differences w_j - w_m by the same for their rows
+     stacked over the pairs. This is a fixed invertible transformation of
+     each pair's block of moments, so the moment conditions and the GMM
+     estimate are the same; and Q is the same when a covariate is rescaled
+     or, with the constant first, centered, so the moment covariance, its
+     condition number and the directions its generalized inverse drops are
+     the same too.
+   - Q2's degrees of freedom are the rank of the moment covariance minus
+     the number of parameters. With linearly dependent moments the
+     generalized inverse leaves the dependent directions out of the
+     statistic, and they are left out of the degrees of freedom; with no
+     restriction left, Q2 is NA. A warning states the rank.
+   - Q1: on a fit with diverging directions, the directions compared are the
+     complement of the diverging ones in the standardized coordinates
+     theta * scale (orthogonality in theta's own coordinates depends on the
+     units). The contrast is whitened by the Cholesky factor of the
+     maximum-likelihood covariance before the eigenvalues of its covariance
+     are judged, so the directions dropped are the same under any linear
+     reparametrization (units, centering, a factor's reference level);
+     scaling by the standard errors alone, the earlier rule, is invariant to
+     units only.
+   - The composite-likelihood estimator is found by Newton steps that are
+     halved until the composite log-likelihood does not fall, and has
+     converged when a full step has been taken from a Newton decrement below
+     1e-8 (100 steps at most; stopping before that step left the estimate up
+     to 1e-6 standard errors off and Q1 up to 1e-5 relative, review finding
+     5).
+     Where its sensitivity matrix is singular by the rule of `.pc_inverse()`
+     the estimator does not exist and Q1 is NA with a warning: on
+     gehlbach2010_ta4m7 the undamped search ran to 6e39 and reported
+     Q1 = 7.6e80.
+   - Q2 is not computed on a fit with diverging directions. Its moment
+     conditions have no finite solution along them, and the moments at the
+     point where the optimizer stopped depend on that point.
+   - Neither test is computed when the fit's information matrix is
+     ill-conditioned on the directions compared (reciprocal condition number
+     of the normalized matrix below 1e-9, the rule of `ill_conditioned`). The
+     estimate is then determined to few digits along some direction; on the
+     three batteries of Miller (2017) the statistics changed by a factor of
+     more than 30 between the published units, the same times 1,000 and
+     standardized covariates. The condition number does not depend on the
+     units; a covariate far from its origin (nearly collinear with the
+     constant) can bring it below the bound, and the help page says so.
+   - A moment covariance that is not singular by the rule and has a
+     normalized reciprocal condition number below 1e-9 draws a warning: the
+     chi-square reference of Q2 can be far off. `moment_rcond` in the
+     details is that normalized number.
+   - A fit that did not converge draws a warning from `fp_tests()`: the
+     statistics depend on where the optimizer stopped.
+   - A Gauss-Newton step of the GMM estimator is taken on `.pc_inverse()` of
+     its matrix. A singular matrix (generalized inverse) or a step that is
+     not finite is reported in a warning; before, the loop was left without
+     one.
+   - Check: the twelve batteries of the stress records whose statistics
+     changed between builds, each in the published units, with the
+     continuous covariates times 1,000, and standardized
+     (verification/probes/2026-11-15/). In the eight where standardizing
+     leaves the model the same, Q1 and Q2 are the same in the three; in the
+     other four they are the same in the first two (the three of Miller 2017
+     are NA in all three by the rule above).
+4. **`singular` does not depend on where the search stopped.** The
+   information of a model with unidentified parameters is singular at a
+   stationary point; away from one, its smallest normalized eigenvalue is of
+   the order of the gradient (differentiate the constancy of the
+   log-likelihood along the unidentified direction twice). Where the search
+   stopped it computed to 3.7e-15 on Windows and to 2.5e-12 on R 4.5.3 under
+   Linux, on either side of the rule's 1e-13. A fit whose information has a
+   reciprocal condition number below 1e-6 is therefore polished to
+   stationarity before the flag is set: Newton steps on the generalized
+   inverse of the normalized Hessian without its directions below 1e-9 of
+   the largest singular value. The gradient has no component along an
+   unidentified direction, so these steps remove all of it; a weakly
+   identified direction below that bound is not moved. A step is kept when
+   it is below 1e-3 in the standardized coordinates, does not raise the
+   objective and lowers the largest gradient; at most eight are taken. The
+   rule itself (1e-13 at the point reported) is unchanged. The bound of 1e-6
+   is far above the values seen at fits of an unidentified model (3.7e-15
+   and 2.5e-12), which met the engine's own Newton tolerance (largest gradient below
+   1e-9 of the objective); a point that only meets the convergence
+   tolerance (1e-5 of the objective) can lie farther from the ridge, with a
+   condition number above the bound, and is then not flagged at all, as
+   before (review finding 2). Families without an analytic Hessian and
+   penalized fits are left as they are. The rule on the scores (withdrawn
+   2026-11-12) is not needed for this.
+5. **Wald tests on a singular fit.** `term_test()` and `combine_test()`
+   (`type = "wald"`) return NA, with a warning, for a contrast that involves
+   parameters the data do not identify: one with a component along a null
+   direction of the information above 1e-6 of the product of the two
+   lengths. The null directions are taken from the information at the
+   estimates, normalized to a unit diagonal (singular values at most 1e-13
+   of the largest, the directions the generalized inverse drops), and not
+   from the covariance: the range of a generalized inverse scaled back by
+   the diagonal is not the orthogonal complement of the null space, and a
+   bootstrap or sandwich covariance of a singular fit can have full rank
+   (review finding 1). Contrasts of identified parameters are tested as
+   before.
+6. **The saddle step's second start** (Phase 4d). Outside the exact
+   separation check, the saddle check covers the coefficients that the size
+   rule flags and their Wald test spares. At a boundary of a covariance a
+   standard error means little: on koyama2025_t4walter (multinomial probit,
+   var:2 at its bound) the information was not inverted before 2026-11-12,
+   the check left those coefficients out, and the step reached -492.6971,
+   converged; with the inverse on the normalized matrix they were checked,
+   and the step reached -492.7201, not converged. The step now starts from
+   both probe points (with and without those coefficients) when they differ,
+   and the refit that ends higher is kept. On that fit it is -492.6971 again.
+
+Not changed: the citations of Rainey (2024). The note on a separated
+coefficient of a Firth fit cites Heinze and Schemper (2002) only; the
+remaining citations are for his findings on maximum-likelihood Wald and
+likelihood-ratio tests and on Wald tests under a Cauchy prior, which stand.
 
 ## 2. Model and parameterisation
 
@@ -1673,6 +1847,112 @@ formula.
   stress battery of build 9446ac9410f9 has 208 such fits, 18 of them not at a
   boundary; a simulated saturated design printed a z of 127 for a split
   intercept the data do not identify).
+  The generalised inverse is used when solve() fails or the reciprocal
+  condition number of the normalized information is below 1e-13
+  (`.pc_singular_tol`; 2026-11-12, the author's decision). solve() alone
+  refuses only below machine epsilon, and the same exactly singular
+  information computed to less than that on Windows and to 1.8e-15 on
+  Linux (the saturated design of test-search.R, GitHub Actions,
+  2026-11-12), so the flag differed by platform. In the stress battery of
+  build beb30c4880b2 on Windows, 72 of 734 fits were ill-conditioned but
+  inverted, with reciprocal condition numbers from 4.6e-16 to 1e-9 and no
+  gap; 14 are below 1e-13
+  (verification/probes/2026-11-12/rcond_band.R, .txt). At 1e-13 the
+  inverse still has two or three correct digits.
+  The flag still depends on the platform for a model whose parameters
+  are not identified. Its Hessian is singular at the maximum only, and
+  near it the reciprocal condition number grows in proportion to the
+  distance: on the saturated design of test-search.R, 3.7e-15 at the
+  Windows fit, 7e-10 at 1e-8 from it, and 2.5e-12 at the fit of R 4.5.3
+  on Linux (GitHub Actions, 2026-11-12), which is ill-conditioned and
+  not singular by the rule. Such a fit is flagged on every platform, by
+  one flag or the other, and the test accepts either. A rule on the
+  cases' scores, which are linearly dependent at every parameter value
+  of such a model (verification/probes/2026-11-12/opg_probe.R, .txt),
+  was tried twice and withdrawn after review (2026-11-12, the author's
+  decision). Dependent scores alone flagged identified fits on few
+  distinct cases, few rankings or few units (a multinomial logit on
+  1,035 cases in ten cells, standard errors understated up to
+  sevenfold). Restricted to ill-conditioned fits and to directions of
+  near-zero curvature, it still flagged an identified fit made
+  ill-conditioned by its covariate's units (reciprocal condition number
+  1.3e-10; slope standard errors 0.11 to 0.78 of the correct ones,
+  which the inverse had given before), and near the 1e-9 bound it
+  dropped some of the unidentified directions only. Near the cutoff the
+  numbers do not tell a model that is not identified from one that is
+  identified and badly scaled, and a wrong call replaces a correct
+  inverse. A candidate for a later release, with those cases as its
+  tests (verification/probes/2026-11-12/scores_rule/).
+  The rule and the generalised inverse are both applied to the normalized
+  matrix (`.pc_inverse()`), so neither depends on the parameters' units:
+  the generalised inverse drops the directions below 1e-13 of the largest
+  singular value there and is rescaled, where MASS::ginv()'s default on
+  the unnormalized matrix dropped everything below 1.5e-8 of its largest
+  singular value, identified directions of small curvature among them. A
+  regular matrix is inverted as before; where solve() refuses it though
+  its normalized form is regular (very different scales), the normalized
+  form is inverted and rescaled, so `singular` is the rule's answer on
+  every platform. The outer-product covariance inverts its matrix by the
+  same function. `glance()` returns `singular`. (Found by the review of
+  2026-11-12.) The same function inverts, at the author's decision of
+  2026-11-12, the other matrices that fell back on a generalised inverse
+  only when solve() refused: the matrix of `.pc_quad_form()` (the
+  Hausman-McFadden and Q1 statistics, whose degrees of freedom are the
+  rank it returns) and the GMM weight of Q2, both with the tolerance
+  sqrt(eps) on the normalized matrix, so that a direction whose variance
+  is rounding error does not enter a statistic; the composite-likelihood
+  bread of Q1; and the penalty gradient of R/firth.R. Regular matrices are
+  inverted by solve() as before. Not changed: the Wald-type tests do not
+  consult `singular` (a candidate for a later release).
+* **Q1 on a fit with diverging coefficients (2026-11-12, the author's
+  decision).** `fp_tests()` leaves the diverging directions out of Q1.
+  With N an orthonormal basis of the span of the separating directions
+  (`.pc_separation()$span`; outside the exact check's scope, the
+  coordinates the size-and-Wald rule flags) and B a basis of its
+  complement, the composite-likelihood estimator moves in the span of B
+  from the ML fit, both covariances are the inverses of the two
+  information matrices in B's coordinates, the contrast is
+  B'(theta_ML - theta_CL), and the degrees of freedom are K minus the
+  rank of N. The warning says so, the details name the coefficients that
+  move along N and its rank, and the printed table carries a line. A
+  separated reference cell is one direction through an intercept and its
+  dummies, whose sums stay in the comparison (review of 2026-11-12: leaving
+  out the coefficients would hold those sums at their ML values and lose
+  degrees of freedom).
+  - Why. On separated samples the statistic depended on how each inversion
+    treated a direction without information. On 400 samples drawn from the
+    pa2006 multinomial logit, 55 separate (the nonresponse equation on
+    `voted2004`: one direction). In build beb30c4880b2 solve() refused the
+    unnormalized composite-likelihood bread on them (reciprocal condition
+    number 8e-17 to 2.2e-16), MASS::ginv() then dropped the diverging
+    direction from that estimator's covariance while the ML covariance kept
+    it, and Q1 was 1,020 to 1,846 on 23 degrees of freedom: every separated
+    sample rejected, and the bootstrap p-value of the observed Q1 was 0.14
+    (0.26 with the vignette's 49 replicates). With that direction kept in
+    both covariances or dropped from both, Q1 is 18.1 or 18.2 on a sample
+    where dropping it from one gives 1,188; and the bread's normalized
+    reciprocal condition number, 8.9e-14 to 2.5e-13, straddles the cutoff of
+    `.pc_inverse()`, so the inversion alone would not settle it on every
+    platform.
+  - Result. The separated samples' Q1 has mean 20.7 on 23 degrees of
+    freedom and rejects at 0.05 in 0.018 (the 345 regular samples,
+    unchanged: mean 21.6 on 24, 0.014); moving the fit 4 to 10 units along
+    the diverging direction changes Q1 in the fourth decimal; the bootstrap
+    p-value of the observed Q1 is 0.007 on 400 replicates and 0.06 on the
+    vignette's 49. Q2 is unchanged: it is computed on every coefficient and
+    its degrees of freedom still count the diverging ones (on the separated
+    samples it rejects in 0.091, on the regular ones in 0.151).
+    Hausman-McFadden and Small-Hsiao are identical on the 400 samples under
+    both builds. In `boot_pvalue()` a replicate that separates has one
+    degree of freedom fewer than the observed statistic it is compared
+    with.
+  - Not changed: two paths of the GMM step on a separated fit (a refused
+    solve() ends the Gauss-Newton loop without a warning; candidates for a
+    later release).
+  - Probes: verification/probes/2026-11-12/q1_null.R, q1_mechanism.R,
+    q1_cause.R, hm_null.R and their outputs (q1_null_dir.txt is this
+    design; q1_null_opt3.txt the coefficients-left-out variant it
+    replaced).
 * Log-sum-exp with the row maximum; log P* for the inflated category through
   a two-term log-sum-exp; `plogis`/`pnorm` with `log.p` for the split equation;
   1 - P_ik computed as the sum of the other probabilities.

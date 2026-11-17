@@ -87,7 +87,7 @@ serial and parallel runs use different random streams.}
 of \code{coef()} but on the INTERNAL scale, which differs from \code{coef()} for the
 structural parameters (the logarithms of the inclusive values, scales, and
 standard deviations; the free Cholesky elements with a log diagonal for
-the probit covariance). \code{object$theta} of an earlier fit is on that scale.
+the multinomial probit covariance). \code{object$theta} of an earlier fit is on that scale.
 Rarely needed for \code{mnl()}, whose log-likelihood is globally concave; the
 other estimators start from the \code{mnl()} estimates (and \code{imnl()} from a
 multistart grid), so \code{start} serves to probe another basin of a
@@ -298,7 +298,8 @@ unit fixed effects separation is decided exactly by the linear program of
 \code{\link[=separation]{separation()}}, elsewhere a coefficient counts as diverging when its
 standardized size exceeds 15 and its Wald |z| is below 1.96), \code{ill_conditioned} (a singular or nearly
 singular information matrix; \code{rcond} holds its reciprocal condition
-number, and \code{singular} is \code{TRUE} when the matrix could not be inverted and
+number, taken on the matrix scaled to a unit diagonal, and \code{singular} is
+\code{TRUE} when that number is below 1e-13 or the matrix could not be inverted, and
 a generalized inverse took its place), and \code{n_modes}, the number of distinct local maxima the search
 found. Every end of the search (one for a single start; for the multistart
 fits every polished start) is classified by the rules of these flags: a
@@ -309,7 +310,12 @@ same point when their log-likelihoods differ by less than 0.01 and either
 their estimates differ by less than a tenth of a standard error or every
 fitted probability by less than 1e-4: ends at other estimates with the
 same probabilities lie on a ridge where the data do not identify the
-estimates, and \code{detail} says how many ends joined the point that way. \code{search} lists the
+estimates, and \code{detail} says how many ends joined the point that way. Maxima
+whose information matrix is ill-conditioned are one point when their
+log-likelihoods differ by less than 0.01, whatever their estimates (a nearly
+flat direction lets the search stop anywhere along it), and \code{detail} counts
+those ends too; two different maxima of that kind at one height would be
+counted once, and only the highest end's estimates are kept. \code{search} lists the
 distinct points (\code{loglik}, \code{type}: \code{"maximum"}, \code{"boundary"}, \code{"saddle"}
 or \code{"not converged"}, \code{reached}: the number of ends there, \code{reported},
 \code{detail}), and the rows of \code{search_theta} hold their estimates on the
@@ -325,7 +331,7 @@ at a limit (it keeps \code{converged = TRUE} when the optimizer met its criterio
 there): the estimates of the parameters at the boundary and their standard
 errors are not meaningful, the others usually are, and the restricted model
 is the one to compare with (the search holds log scales, log inclusive
-values, the probit's log Cholesky diagonals and log standard deviations
+values, the multinomial probit's log Cholesky diagonals and log standard deviations
 within +/- 8; where the log-likelihood still rises at that bound the
 warning says so, and the reported log-likelihood is then below the model's
 supremum, so a comparison with the restricted model understates it);
@@ -335,7 +341,13 @@ combination of parameters is barely identified and its standard errors are
 unreliable, and with \code{singular = TRUE} some parameters are not identified
 at all: their estimates and standard errors (from the generalized inverse)
 are not meaningful, and the summary's footer says so, since their rows in
-the table look like the others; \code{n_modes > 1} means the reported fit is the highest of several
+the table look like the others. The information of a model whose
+parameters are not identified is singular at the maximum itself, and close
+to it its condition number is of the order of the gradient. A fit whose
+information is ill-conditioned is therefore brought to a stationary point
+by a few Newton steps before the flag is set, so that the flag does not
+depend on how closely the search converged;
+\code{n_modes > 1} means the reported fit is the highest of several
 maxima found. The reported fit is the highest end of the search, maximum or
 not: where it is at a boundary and a lower end is a local maximum, a message
 says so, and that maximum's row of \code{search_theta} refits it as \code{start}. An

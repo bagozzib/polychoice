@@ -81,7 +81,7 @@ serial and parallel runs use different random streams.}
 of \code{coef()} but on the INTERNAL scale, which differs from \code{coef()} for the
 structural parameters (the logarithms of the inclusive values, scales, and
 standard deviations; the free Cholesky elements with a log diagonal for
-the probit covariance). \code{object$theta} of an earlier fit is on that scale.
+the multinomial probit covariance). \code{object$theta} of an earlier fit is on that scale.
 Rarely needed for \code{mnl()}, whose log-likelihood is globally concave; the
 other estimators start from the \code{mnl()} estimates (and \code{imnl()} from a
 multistart grid), so \code{start} serves to probe another basin of a
@@ -130,9 +130,9 @@ draws of a case are tied to its row position, so predictions for the same
 case in another row use other draws). Gradients are analytic throughout,
 including the covariance parameters (forward-mode differentiation through
 the Cholesky factor and the GHK recursion); the Hessian is obtained by
-central differences of the analytic gradient. The probit does not nest the
-logit, so compare them with \code{\link[=vuong]{vuong()}} or the information criteria. Probit
-coefficients are on a smaller scale than logit coefficients (the
+central differences of the analytic gradient. The multinomial probit does not nest the
+multinomial logit, so compare them with \code{\link[=vuong]{vuong()}} or the information criteria. Multinomial probit
+coefficients are on a smaller scale than multinomial logit coefficients (the
 error-difference variance is normalized to 1 rather than \eqn{\pi^2/3}).
 Starting values come from the multinomial logit fit (scaled) with the
 covariance implied by iid errors, and from independent differences.

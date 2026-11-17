@@ -15,9 +15,21 @@ fp_tests(
 }
 \arguments{
 \item{object}{A fitted \code{\link[=mnl]{mnl()}} model with at least three alternatives.
-A fit with diverging coefficients (separation) draws a warning: the
-contrasts then compare estimates that do not exist and can reject
-spuriously.}
+A fit with diverging coefficients (separation) draws a warning. Along a
+diverging direction neither estimator has an estimate, so \eqn{Q_1}
+leaves those directions out: the composite-likelihood estimator keeps
+the fit's values along them, the two estimators are compared on the
+other directions, and the degrees of freedom are reduced by their
+number (\code{attr(, "details")$q1_left_out} names the coefficients that move
+along them and \verb{$q1_left_out_rank} counts the directions; a separated
+reference cell is one direction through an intercept and a dummy, whose
+sum stays in the comparison). The statistic then does not depend on
+where the optimizer stopped. \eqn{Q_2} is not computed (\code{NA}): its
+moment conditions have no finite solution along a diverging direction,
+and the moments at the point where the optimizer stopped depend on that
+point.
+In \code{\link[=boot_pvalue]{boot_pvalue()}} a replicate that separates has fewer degrees of
+freedom than the observed statistic it is compared with.}
 
 \item{pairs}{\code{"all"} (default) or \code{"base"}.}
 
@@ -34,7 +46,9 @@ spuriously.}
 A data frame of class \code{"iia_test"} with one row per test:
 \code{test}, \code{statistic}, \code{df}, \code{p.value}, \code{psd}, and \code{pairs}. The attribute
 \code{"details"} holds the CL and GMM estimates and the reciprocal condition
-number of the moment covariance.
+number of the moment covariance; on a separated fit also \code{q1_left_out} and
+\code{q1_left_out_rank}, and \code{theta_cl} then equals the fit along the directions
+left out, where \code{vcov_cl} has no variance.
 }
 \description{
 The two tests of Fok and Paap (2025), built on the property that under the
@@ -90,7 +104,30 @@ optimization. All three have the same degrees of freedom. With case-specific
 covariates only, the overidentifying restrictions carry information only
 through the covariates (Fok and Paap 2025, Section 2.2): with few or weak
 covariates the moment covariance is near singular and the test has little
-power; its reciprocal condition number is reported.
+power; its reciprocal condition number is reported. Where the moments are
+linearly dependent (one binary covariate, say) the moment covariance is
+singular: the statistic is then computed on its generalized inverse, its
+degrees of freedom are the rank of the moment covariance minus the number
+of parameters, and a warning says so.
+
+\strong{Units of the covariates.} Where they are computed, neither statistic depends on the units of the
+covariates, on their centering, or on a factor's reference level. The
+instruments of \eqn{Q_2} are put on a canonical scale before the moments
+are formed, and the contrast of \eqn{Q_1} is whitened by the covariance
+of the maximum-likelihood estimator, so that the directions a generalized
+inverse drops are the same in any parametrization.
+
+\strong{When the tests are not computed.} Both tests compare estimators at the
+fit. Where the fit's information matrix is ill-conditioned on the
+directions compared (reciprocal condition number of its normalized form
+below 1e-9, the rule of the fit's \code{ill_conditioned} flag), the estimates
+are determined to few digits along some direction and the statistics
+would depend on where the optimizer stopped: both are \code{NA}, with a
+warning. That condition number does not depend on the covariates' units,
+but a covariate far from its origin (a calendar year) is nearly collinear
+with the constant and can bring it below the bound; centering it helps.
+\eqn{Q_1} is also \code{NA} when the composite-likelihood estimator
+does not exist (its sensitivity matrix is singular).
 }
 \examples{
 set.seed(1)

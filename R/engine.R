@@ -30,7 +30,7 @@
 ## Hessian; returns the parameters on their natural scale. `polish = FALSE`
 ## runs the BFGS stage only (the screening pass of the multistart).
 ## The search holds the structural log-parameters (log scales, log inclusive
-## values, the probit's log variances, log standard deviations) within
+## values, the multinomial probit's log variances, log standard deviations) within
 ## +/- .pc_str_bound, the value the boundary step moves them to: past the
 ## boundary flag (|log| > 7) the likelihood is usually flat, and there the HEV
 ## integrals are costly (on Palik et al. 2025 two thirds of the search's time
@@ -152,7 +152,7 @@
 }
 
 ## the structural parameters estimated on the log scale (log scales, log
-## inclusive values, log standard deviations, the probit's log variances),
+## inclusive values, log standard deviations, the multinomial probit's log variances),
 ## whose boundary (0 or infinity) lies at minus or plus infinity
 .pc_str_log <- function(D) D$idx$str[D$blocks[D$idx$str] %in% c("scale", "nest", "random intercept") | grepl("^var:", D$par_names[D$idx$str])]
 
@@ -250,7 +250,7 @@
   D0
 }
 
-## the multinomial-logit design underlying a nested logit / HEV / probit design
+## the multinomial-logit design underlying a nested logit / HEV / multinomial probit design
 ## (same beta / gamma blocks, no structural block): the starting fit
 .pc_as_mnl <- function(D) {
   D0 <- D
@@ -280,8 +280,8 @@
     ## parameters at the MNL (lambda = 1, theta = 1) and one perturbed value
     D0 <- .pc_as_mnl(D)
     b0 <- .pc_optimize(.pc_fns(D0), numeric(D0$K), scale[-D$idx$str], maxit, reltol, newton_first = TRUE)$par
-    ## probit utilities are on a different scale: the logit's error differences
-    ## have variance pi^2/3, the probit's first difference variance 1
+    ## multinomial probit utilities are on a different scale: the multinomial logit's error differences
+    ## have variance pi^2/3, the multinomial probit's first difference variance 1
     if (D$family == "mnp") b0 <- b0 / sqrt(pi^2 / 3)
     ns <- D$str$n
     s_alt <- switch(D$family, nlogit = rep(log(0.7), ns), hev = rep(-0.3, ns), mnp = D$str$start_alt, remnl = rep(log(0.5), ns), numeric(ns))
@@ -331,6 +331,84 @@
        c(b0, shift(2 * d0, 1)), c(b0, shift(2 * d0, 2)), c(b0, shift(3 * d0, 1)), c(b0, shift(3 * d0, 2)))
 }
 
+## A matrix is treated as singular when the reciprocal condition number of its
+## diagonally normalized form is below this value (a fit's `singular` flag;
+## 2026-11-12). Between it and 1e-9 a fit is flagged ill-conditioned and the
+## inverse is kept: it has two or more correct digits there.
+.pc_singular_tol <- 1e-13
+
+## Newton steps to stationarity for a fit whose information is ill-conditioned
+## but not singular by the rule above (DESIGN.md Phase 4g). The information of
+## a model whose parameters are not identified is singular at a stationary
+## point, and away from one its smallest normalized eigenvalue is of the order
+## of the gradient: where the search stopped it computed to 3.7e-15 on one
+## platform and to 2.5e-12 on another, so the same fit was singular on one and
+## ill-conditioned on the other. The steps use the generalized inverse of the
+## normalized Hessian without its directions below 1e-9 of the largest
+## singular value: the log-likelihood is constant along an unidentified
+## direction, so the gradient has no component along it and the steps remove
+## the rest; a weakly identified direction is left where the search put it.
+## A step is kept when it is small (the point is already at the optimizer's
+## tolerance), does not raise the objective and lowers the largest gradient.
+## Families without an analytic Hessian are left as they are (a differenced
+## Hessian does not resolve 1e-13). Returns list(par, value, max_grad), or
+## NULL when no step was kept.
+.pc_stationary_polish <- function(fn, theta, scale, maxit = 8L) {
+  if (is.null(fn$hess)) return(NULL)
+  s <- .pc_std(fn, scale); ts <- theta * scale
+  val <- tryCatch(s$fs(ts), error = function(e) { .pc_pass_limit(e); NA_real_ })
+  if (!is.finite(val)) return(NULL)
+  g <- s$gs(ts); moved <- FALSE
+  for (i in seq_len(maxit)) {
+    if (!all(is.finite(g))) break
+    H <- tryCatch(s$hs(ts), error = function(e) { .pc_pass_limit(e); NULL })
+    if (is.null(H) || !all(is.finite(H))) break
+    dn <- .pc_unit_diag(H); sv <- svd(H / tcrossprod(dn)); keep <- sv$d > 1e-9 * sv$d[1L]
+    if (!any(keep)) break
+    step <- as.vector(sv$v[, keep, drop = FALSE] %*% (crossprod(sv$u[, keep, drop = FALSE], g / dn) / sv$d[keep])) / dn
+    if (!all(is.finite(step)) || max(abs(step)) > 1e-3) break
+    tn <- ts - step
+    vn <- tryCatch(s$fs(tn), error = function(e) { .pc_pass_limit(e); NA_real_ }); gn <- if (is.finite(vn)) s$gs(tn) else NA_real_
+    if (!is.finite(vn) || vn > val + 1e-12 * max(1, abs(val)) || !all(is.finite(gn)) || !(max(abs(gn)) < max(abs(g)))) break
+    ts <- tn; val <- vn; g <- gn; moved <- TRUE
+  }
+  if (moved) list(par = s$bd(ts / scale), value = val, max_grad = max(abs(g))) else NULL
+}
+
+## the square roots of a matrix's absolute diagonal, 1 where an entry is zero
+## or not finite: dividing by their outer product gives a unit diagonal
+## whatever the units
+.pc_unit_diag <- function(M) { d <- sqrt(abs(diag(M))); d[!(is.finite(d) & d > 0)] <- 1; d }
+
+## The inverse of a symmetric matrix M, or its generalized inverse when M is
+## singular by the rule above. The rule and the generalized inverse are
+## applied to the normalized matrix Mn = M / (d d'), d = sqrt|diag M|, so
+## neither depends on the parameters' units: solve() refuses only below
+## machine epsilon on the matrix it is given, and an exactly singular
+## information computes to 1e-15 or so on some platforms and to less on
+## others, so its refusal differs by platform; and MASS::ginv() drops the
+## directions below its tolerance relative to the largest singular value of
+## the matrix it is given. The generalized inverse here drops the directions
+## of Mn below `gtol` of its largest singular value and is rescaled. With the
+## default, .pc_singular_tol, a weakly identified direction keeps its large
+## variance (a covariance); a statistic's weight matrix passes
+## sqrt(.Machine$double.eps), so that a direction whose variance is rounding
+## error does not enter the statistic. A regular M is inverted as it is;
+## where solve() refuses M though Mn is regular (very different scales), Mn
+## is inverted and rescaled. Returns list(inv, ginv, rcond, rank).
+.pc_inverse <- function(M, dn = .pc_unit_diag(M), Mn = M / tcrossprod(dn),
+                        rc = tryCatch(rcond(Mn), error = function(e) { .pc_pass_limit(e); NA_real_ }), gtol = .pc_singular_tol) {
+  gi <- function() {
+    s <- svd(Mn); pos <- s$d > max(gtol * s$d[1L], 0)
+    inv <- if (any(pos)) s$v[, pos, drop = FALSE] %*% (t(s$u[, pos, drop = FALSE]) / s$d[pos]) else matrix(0, nrow(Mn), ncol(Mn))
+    list(inv = inv / tcrossprod(dn), ginv = TRUE, rcond = rc, rank = sum(pos))
+  }
+  if (is.finite(rc) && rc < .pc_singular_tol) return(gi())
+  inv <- tryCatch(solve(M), error = function(e) { .pc_pass_limit(e); NULL })
+  if (is.null(inv)) inv <- tryCatch(solve(Mn) / tcrossprod(dn), error = function(e) { .pc_pass_limit(e); NULL })
+  if (is.null(inv)) gi() else list(inv = inv, ginv = FALSE, rcond = rc, rank = ncol(Mn))
+}
+
 ## covariance of the estimates: analytic (inverse observed information), robust
 ## (sandwich over cases), or cluster (sandwich over clusters), computed in the
 ## standardized parameterization ts = theta * scale and mapped back
@@ -360,9 +438,8 @@
   Hn <- Hs / tcrossprod(dn)
   noise <- if (is.null(asym)) NULL else asym / tcrossprod(dn)                 # normalized asymmetry, per entry
   rc <- tryCatch(rcond(Hn), error = function(e) { .pc_pass_limit(e); NA_real_ })
-  bread <- tryCatch(solve(Hs), error = function(e) { .pc_pass_limit(e); NULL })
-  used_ginv <- is.null(bread)
-  if (used_ginv) bread <- MASS::ginv(Hs)
+  iv <- .pc_inverse(Hs, dn, Hn, rc)
+  bread <- iv$inv; used_ginv <- iv$ginv
   Vs <- if (type == "analytic") bread else {
     S <- fn$scores(theta)
     if (anyNA(S)) return(NULL)
@@ -371,7 +448,7 @@
       if (is.null(cluster)) stop("se = \"cluster\" requires 'cluster'.", call. = FALSE)
       crossprod(as.matrix(rowsum(S * w, group = cluster)))
     } else crossprod(S * sqrt(w))
-    if (type == "opg") tryCatch(solve(meat), error = function(e) { .pc_pass_limit(e); MASS::ginv(meat) }) else bread %*% meat %*% bread
+    if (type == "opg") .pc_inverse(meat)$inv else bread %*% meat %*% bread
   }
   V <- Vs / tcrossprod(scale)
   attr(V, "rcond") <- rc; attr(V, "ginv") <- used_ginv; attr(V, "hn") <- Hn; attr(V, "noise") <- noise; attr(V, "hdiag") <- diag(Hs); attr(V, "hrow") <- apply(abs(Hs), 1L, max)
@@ -628,9 +705,9 @@
 
 ## The warning of a fit whose structural log-parameters `at` are past the
 ## boundary flag, of which those named in `rising` are at the search's bound
-## with the log-likelihood still rising (.pc_rising_at_bound). The probit does
-## not nest the logit, so its comparison with mnl() is vuong(), not lr_test().
-## With four or more alternatives the probit's probabilities are GHK
+## with the log-likelihood still rising (.pc_rising_at_bound). The multinomial probit does
+## not nest the multinomial logit, so its comparison with mnl() is vuong(), not lr_test().
+## With four or more alternatives the multinomial probit's probabilities are GHK
 ## simulations, and near a singular covariance one draw's term can switch
 ## between about 0 and 1 over a small change in the parameters (on a simulated
 ## design at a log Cholesky diagonal of -8 the derivative along a coefficient
@@ -693,16 +770,27 @@
   ## the information-based diagnostics' inputs, before anything is reported, so
   ## that a fit stopped at a saddle can be moved off it first (below)
   V <- NULL; boot <- NULL; Vn <- NULL
-  if (se %in% c("analytic", "opg", "robust", "cluster")) V <- .pc_vcov(theta, fn, se, obs$cluster, scale, obs$w)
-  ## the conditioning and saddle diagnostics come from the information matrix
-  ## whatever the standard errors are (computed here for the bootstrap and for
-  ## se = "none"; internal refits pass check = FALSE)
-  Vd <- if (!is.null(V) && !is.null(attr(V, "hn"))) V else if (check) .pc_vcov(theta, fn, "analytic", NULL, scale, obs$w) else NULL
-  rc <- if (is.null(Vd) || is.null(attr(Vd, "rcond"))) NA_real_ else attr(Vd, "rcond")
-  hn <- if (is.null(Vd)) NULL else attr(Vd, "hn")
-  noise_m <- if (is.null(Vd)) NULL else attr(Vd, "noise")
-  hdiag <- if (is.null(Vd)) NULL else attr(Vd, "hdiag"); hrow <- if (is.null(Vd)) NULL else attr(Vd, "hrow")
-  used_ginv <- !is.null(Vd) && isTRUE(attr(Vd, "ginv"))
+  for (pass in 1:2) {
+    if (se %in% c("analytic", "opg", "robust", "cluster")) V <- .pc_vcov(theta, fn, se, obs$cluster, scale, obs$w)
+    ## the conditioning and saddle diagnostics come from the information matrix
+    ## whatever the standard errors are (computed here for the bootstrap and for
+    ## se = "none"; internal refits pass check = FALSE)
+    Vd <- if (!is.null(V) && !is.null(attr(V, "hn"))) V else if (check) .pc_vcov(theta, fn, "analytic", NULL, scale, obs$w) else NULL
+    rc <- if (is.null(Vd) || is.null(attr(Vd, "rcond"))) NA_real_ else attr(Vd, "rcond")
+    hn <- if (is.null(Vd)) NULL else attr(Vd, "hn")
+    noise_m <- if (is.null(Vd)) NULL else attr(Vd, "noise")
+    hdiag <- if (is.null(Vd)) NULL else attr(Vd, "hdiag"); hrow <- if (is.null(Vd)) NULL else attr(Vd, "hrow")
+    used_ginv <- !is.null(Vd) && isTRUE(attr(Vd, "ginv"))
+    ## an information with a reciprocal condition number below 1e-6: the
+    ## point is polished to stationarity and the information taken again,
+    ## so that `singular` does not depend on where the search stopped
+    if (pass == 2L || !check || firth || !is.finite(rc) || rc >= 1e-6) break
+    pol <- .pc_stationary_polish(fn, theta, scale)
+    if (is.null(pol)) break
+    op$par <- pol$par; op$value <- pol$value; op$max_grad <- pol$max_grad; if (pol$max_grad < .pc_gtol(pol$value)) op$converged <- TRUE
+    theta <- op$par; names(theta) <- D$par_names
+    coefficients <- .pc_natural(theta, D); names(coefficients) <- D$par_names
+  }
   ## (1) separation / boundary: a coefficient whose standardized
   ## magnitude (a one-SD effect) exceeds 15, or a 0/1 column (a dummy, a unit
   ## constant) whose own coefficient exceeds 15: rare dummies have a tiny SD and
@@ -753,8 +841,32 @@
   ## multistart's record kept. A refit that ends no higher leaves the saddle
   ## reported as before.
   if (check && sad$type == "saddle" && !is.null(sad$point) && .saddle < 3L) {
-    esc <- tryCatch(.pc_optimize(fn, sad$point, scale, maxit, reltol), error = function(e) { .pc_pass_limit(e); NULL })
-    if (!is.null(esc) && is.finite(esc$value)) esc <- tryCatch(.pc_boundary_step(fn, D, esc, scale, maxit, reltol), error = function(e) { .pc_pass_limit(e); esc })
+    ## the step's start: the probe point over the parameters checked. Outside
+    ## the exact separation check, a coefficient that the size rule flags and
+    ## its Wald test spares (.pc_diverge with standard errors) is among them;
+    ## at a boundary of a covariance its standard error means little, so the
+    ## probe point without such coefficients is a second start, and the refit
+    ## that ends higher is kept (koyama2025_t4walter, mnprobit: -492.7201, not
+    ## converged, from the first and -492.6971 from the second)
+    pts <- list(sad$point)
+    if (!firth && is.null(sepchk)) {
+      dv0 <- tryCatch(.pc_diverge(theta, D, scale, se = NULL), error = function(e) { .pc_pass_limit(e); NULL })
+      if (length(dv0) == length(theta)) {
+        ab0 <- at_bound | (dv0 %in% TRUE)
+        if (any(ab0 != at_bound) && any(!ab0)) {
+          noise0 <- if (is.null(noise_m)) 0 else max(noise_m[!ab0, !ab0, drop = FALSE])
+          sad0 <- tryCatch(.pc_saddle(fn$nll, theta, scale, hn, hdiag, !ab0, op$value, reltol, max(1e-8, 10 * noise0)), error = function(e) { .pc_pass_limit(e); NULL })
+          if (!is.null(sad0) && identical(sad0$type, "saddle") && !is.null(sad0$point)) pts <- c(pts, list(sad0$point))
+        }
+      }
+    }
+    escs <- lapply(pts, function(p) {
+      e1 <- tryCatch(.pc_optimize(fn, p, scale, maxit, reltol), error = function(e) { .pc_pass_limit(e); NULL })
+      if (!is.null(e1) && is.finite(e1$value)) e1 <- tryCatch(.pc_boundary_step(fn, D, e1, scale, maxit, reltol), error = function(e) { .pc_pass_limit(e); e1 })
+      e1
+    })
+    escs <- Filter(function(e) !is.null(e) && is.finite(e$value), escs)
+    esc <- if (length(escs)) escs[[which.min(vapply(escs, `[[`, numeric(1), "value"))]] else NULL
     if (!is.null(esc) && is.finite(esc$value) && esc$value < op$value - 1e-8 * max(1, abs(op$value))) {
       message("The fit stopped at a saddle (", if (firth) "penalized " else "", "log-likelihood ", format(-op$value, digits = 10),
               "); a step along the direction in which it rises and a refit reach ", format(-esc$value, digits = 10), ".")
@@ -883,7 +995,7 @@
     rep_detail <- switch(rep_type, boundary = .pc_boundary_detail(D, diverge, str_log[abs(theta[str_log]) > 7], pb),
                          saddle = sprintf("smallest normalized eigenvalue %.2g", sad$min_eig),
                          `not converged` = sprintf("largest scaled gradient %.2g", op$max_grad),
-                         maximum = if (ill) "ill-conditioned information" else "")
+                         maximum = if (ill) .pc_ill_detail else "")
     search <- .pc_search_record(D, fn, scale, obs$w, ends, best, op, list(type = rep_type, detail = rep_detail, se = se_info), reltol)
     n_modes <- sum(search$table$type == "maximum")
     if (D$k > 0L) .pc_search_message(search$table, n_modes, n_starts)
@@ -1030,6 +1142,12 @@
   paste(parts, collapse = "; ")
 }
 
+## the detail of a maximum whose information is ill-conditioned (reciprocal
+## condition number below 1e-9, or singular): set for the reported fit in
+## .pc_fit_design() and for the other ends in .pc_end_type(), and read by
+## .pc_search_record()
+.pc_ill_detail <- "ill-conditioned information"
+
 ## The type of an end of the search other than the reported fit, by the rules
 ## the reported fit's flags follow (.pc_fit_design): "boundary" (a diverging
 ## coefficient by the exact check of separation() or the size-and-Wald rule,
@@ -1057,7 +1175,7 @@
   if (sad$type == "saddle") return(list(type = "saddle", detail = sprintf("smallest normalized eigenvalue %.2g", sad$min_eig), se = se))
   if (!isTRUE(end$converged)) return(list(type = "not converged", detail = sprintf("largest scaled gradient %.2g", end$max_grad), se = se))
   rc <- attr(Vd, "rcond")
-  list(type = "maximum", detail = if (ginv || (is.finite(rc) && rc < 1e-9)) "ill-conditioned information" else "", se = se)
+  list(type = "maximum", detail = if (ginv || (is.finite(rc) && rc < 1e-9)) .pc_ill_detail else "", se = se)
 }
 
 ## The record of the search's ends (object$search and object$search_theta):
@@ -1068,6 +1186,10 @@
 ## their estimates by less than a tenth of the first's inverse-information
 ## standard error (where it has none, by less than 0.01 in the standardized
 ## coordinates theta * scale) or every fitted probability by less than 1e-4.
+## Maxima whose information is ill-conditioned are also one point when their
+## log-likelihoods are within 0.01 of the point's highest end, whatever their
+## estimates and probabilities (DESIGN.md Phase 4f, amendment of 2026-11-12);
+## only the highest such end's estimates are kept.
 ## The second is the data's own test: ends at other estimates with the same
 ## probabilities lie on a ridge of non-identification (the saturated designs
 ## of DiGiuseppe et al. 2024, where the estimates differ by several units and
@@ -1080,7 +1202,8 @@
 ## reported, detail), ordered by log-likelihood, and `theta`, the estimates
 ## at each point on the internal scale of `start`, one row per row of `table`.
 .pc_search_record <- function(D, fn, scale, w, ends, best, op, rep, reltol) {
-  pts <- list(list(par = op$par, ll = -op$value, se = rep$se, type = rep$type, detail = rep$detail, n = 0L, ridge = 0L, reported = TRUE))
+  pts <- list(list(par = op$par, ll = -op$value, se = rep$se, type = rep$type, detail = rep$detail, n = 0L, ridge = 0L, flat = 0L, reported = TRUE))
+  ill_max <- function(type, detail) identical(type, "maximum") && identical(detail, .pc_ill_detail)
   same_est <- function(par, p) {
     d <- abs(par - p$par)
     ok <- if (is.null(p$se)) rep(FALSE, length(d)) else is.finite(p$se) & p$se > 0
@@ -1106,14 +1229,20 @@
     }
     if (hit) { pts[[hit]]$n <- pts[[hit]]$n + 1L; pts[[hit]]$ridge <- pts[[hit]]$ridge + by_prob; next }
     ty <- .pc_end_type(D, fn, scale, w, e, reltol)
-    pts[[length(pts) + 1L]] <- list(par = e$par, ll = -e$value, se = ty$se, type = ty$type, detail = ty$detail, n = 1L, ridge = 0L, reported = FALSE, prob = pe)
+    ## a maximum whose information is ill-conditioned joins a point of the same
+    ## kind within 0.01 in log-likelihood: the estimates wander along a nearly
+    ## flat direction there, so neither the estimates nor the probabilities
+    ## show that the two are different maxima
+    if (ill_max(ty$type, ty$detail)) for (j in near) if (ill_max(pts[[j]]$type, pts[[j]]$detail)) { hit <- j; break }
+    if (hit) { pts[[hit]]$n <- pts[[hit]]$n + 1L; pts[[hit]]$flat <- pts[[hit]]$flat + 1L; next }
+    pts[[length(pts) + 1L]] <- list(par = e$par, ll = -e$value, se = ty$se, type = ty$type, detail = ty$detail, n = 1L, ridge = 0L, flat = 0L, reported = FALSE, prob = pe)
   }
   o <- order(-vapply(pts, `[[`, numeric(1), "ll"), !vapply(pts, `[[`, logical(1), "reported"))
   pts <- pts[o]
   detail <- vapply(pts, function(p) {
-    if (p$ridge == 0L) return(p$detail)
-    r <- sprintf("%d %s at other estimates with the same fitted probabilities: the estimates are not identified", p$ridge, if (p$ridge == 1L) "end" else "ends")
-    if (nzchar(p$detail)) paste0(p$detail, "; ", r) else r
+    r <- c(if (p$ridge > 0L) sprintf("%d %s at other estimates with the same fitted probabilities: the estimates are not identified", p$ridge, if (p$ridge == 1L) "end" else "ends"),
+           if (p$flat > 0L) sprintf("%d other ill-conditioned %s within 0.01 in log-likelihood, not counted apart", p$flat, if (p$flat == 1L) "end" else "ends"))
+    paste(c(if (nzchar(p$detail)) p$detail, r), collapse = "; ")
   }, character(1))
   table <- data.frame(loglik = vapply(pts, `[[`, numeric(1), "ll"), type = vapply(pts, `[[`, character(1), "type"),
                       reached = vapply(pts, `[[`, integer(1), "n"), reported = vapply(pts, `[[`, logical(1), "reported"),
