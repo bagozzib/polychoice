@@ -86,7 +86,7 @@ d <- data.frame(y = factor(y), x1, x2, unit)
 m <- mundlak(y ~ x1 + x2, d, unit = "unit")
 m$formula
 #> y ~ x1 + x2 + x1_mean + x2_mean
-#> <environment: 0x5de62a803248>
+#> <environment: 0x5c1f4d15b8e8>
 fit <- mnl(m$formula, m$data, cluster = "unit")
 ## the unit mean of x1 picks up the unit effect in b's equation; without
 ## the means x1's slope absorbs it. This pooled fit estimates average
