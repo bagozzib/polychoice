@@ -1,0 +1,486 @@
+# Beyond IIA: nested logit, HEV, multinomial probit, random intercepts, and panels
+
+When IIA fails, or when the cases of a unit share unobserved tastes, the
+multinomial logit is the restricted member of several families that
+`polychoice` fits with the same interface. This vignette fits each of
+them, shows how to compare them with the multinomial logit, and notes
+where their parameters are identified only weakly.
+
+``` r
+
+library(polychoice)
+```
+
+## Nested logit
+
+The two-level nested logit groups the alternatives into nests with an
+inclusive-value parameter $`\lambda_m`$ per nest; $`\lambda_m = 1`$ for
+every nest is the multinomial logit, and smaller values mean stronger
+correlation of the unobserved utilities within the nest. The
+parameterization is the utility-maximization-consistent one of McFadden
+(1978), the form that `mlogit` and Stata’s `nlogit` use, so results are
+comparable across software. Here the Australian travel-mode data are
+grouped into fast and slow modes.
+
+``` r
+
+data("TravelMode", package = "AER")
+TM <- TravelMode
+TM$chosen <- as.integer(TM$choice == "yes")
+nests <- list(fast = c("air", "train"), slow = c("bus", "car"))
+m0 <- mnl(chosen ~ wait + vcost + travel + gcost | income + size, data = TM,
+          id = "individual", alt = "mode")
+mn <- nlogit(chosen ~ wait + vcost + travel + gcost | income + size, data = TM,
+             id = "individual", alt = "mode", nests = nests)
+#> Inclusive-value parameter(s) above 1 (lambda:fast): outside the range consistent with random-utility maximization for all covariate values; the nesting may be wrong or unnecessary (lr_test() against the mnl() fit).
+summary(mn)
+#> Nested logit (2 nests) 
+#> Call: nlogit(formula = chosen ~ wait + vcost + travel + gcost | income + 
+#>     size, data = TM, nests = nests, id = "individual", alt = "mode")
+#> Alternatives: air, train, bus, car  (base: air)
+#> 
+#> Outcome equations (alternative:term):
+#>                   Estimate Std. Error z value Pr(>|z|)    
+#> train:(Intercept)  1.12266    1.44876   0.775 0.438393    
+#> train:income      -0.08694    0.02567  -3.386 0.000708 ***
+#> train:size         0.77910    0.52134   1.494 0.135069    
+#> bus:(Intercept)    0.10158    1.49349   0.068 0.945776    
+#> bus:income        -0.03292    0.02062  -1.597 0.110274    
+#> bus:size           0.45035    0.51447   0.875 0.381376    
+#> car:(Intercept)   -5.13458    1.64663  -3.118 0.001819 ** 
+#> car:income        -0.01996    0.01706  -1.170 0.241861    
+#> car:size           0.49022    0.40260   1.218 0.223359    
+#> ---
+#> Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
+#> 
+#> Generic coefficients (alternative-specific covariates):
+#>         Estimate Std. Error z value Pr(>|z|)    
+#> wait   -0.126661   0.021141  -5.991 2.08e-09 ***
+#> vcost  -0.072630   0.032583  -2.229  0.02581 *  
+#> travel -0.013933   0.004646  -2.999  0.00271 ** 
+#> gcost   0.065636   0.033150   1.980  0.04771 *  
+#> ---
+#> Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
+#> 
+#> Inclusive-value parameters lambda (z tests are against 1 = multinomial logit; the joint test is lr_test() against the mnl() fit):
+#>             Estimate Std. Error z value Pr(>|z|)  
+#> lambda:fast   1.7980     0.4091   1.950   0.0511 .
+#> lambda:slow   0.7980     0.2265  -0.892   0.3726  
+#> ---
+#> Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
+#> 
+#> Standard errors: analytic. Log-likelihood -165.223 on 15 parameters, 210 cases. AIC 360.45, BIC 410.65.
+lr_test(m0, mn)
+#> Likelihood-ratio test
+#>   LR = 10.9286 on 2 df, p = 0.004235
+```
+
+The point estimates equal mlogit’s. The standard errors do not: mlogit
+reports outer-product (BHHH) standard errors for this model, which
+`se = "opg"` reproduces (0.85 and 0.35 for the two inclusive-value
+parameters against the 0.41 and 0.23 of the observed information shown
+here). Which to report: the observed information (the default) is the
+usual choice; the two estimates of the information agree when the model
+is correctly specified and the sample is large, so a gap of a factor of
+two, as here, is itself a warning about the specification, and
+`se = "robust"` (the sandwich of the two) is the choice that does not
+rest on it. Note also the value 1.80 for the fast nest: an
+inclusive-value parameter above 1 lies outside the range consistent with
+random-utility maximization for all covariate values (the fit says so in
+the message printed above) and is itself evidence that this nesting is
+not the right description of these data. `equal_lambda = TRUE` imposes
+one shared inclusive-value parameter; a singleton nest’s parameter does
+not enter the likelihood and is fixed at 1. The parameters are estimated
+on the log scale and reported on the natural scale with delta-method
+standard errors; the z tests in the summary are against 1, and the joint
+test of IIA is the likelihood-ratio test against the
+[`mnl()`](https://bagozzib.github.io/polychoice/reference/mnl.md) fit,
+as above.
+
+With case-specific covariates only (the wide layout) the inclusive-value
+parameters are identified only through the curvature of the inclusive
+values and are recovered imprecisely; alternative-specific covariates
+identify them sharply. The same holds for the HEV scales and the
+multinomial probit covariance below, and the package’s simulators
+([`rnlogit()`](https://bagozzib.github.io/polychoice/reference/rnlogit.md),
+[`rhev()`](https://bagozzib.github.io/polychoice/reference/rhev.md),
+[`rmnp()`](https://bagozzib.github.io/polychoice/reference/rmnp.md))
+have a `gamma` argument that generates such covariates in the long
+layout.
+
+## Heteroskedastic extreme value
+
+The HEV model (Bhat 1995) keeps independent Gumbel errors but lets their
+scale differ by alternative (the base alternative’s scale is 1); IIA is
+relaxed through the scales. The choice probabilities are one-dimensional
+integrals that the package evaluates to about ten digits by a
+trapezoidal rule, or by adaptive Gauss-Kronrod quadrature when one
+alternative’s scale is much smaller than another’s. A simulated
+long-layout example:
+
+``` r
+
+set.seed(15)
+dh <- rhev(600, beta = cbind(b = c(0.5, -1, 0.8), c = c(-0.3, 0.6, -0.5)),
+           scale = c(1, 0.6, 1.5), gamma = 1)
+mh <- hev(chosen ~ w1 | x1 + x2, data = dh, id = "id", alt = "alt")
+summary(mh)
+#> Heteroskedastic extreme value model 
+#> Call: hev(formula = chosen ~ w1 | x1 + x2, data = dh, id = "id", alt = "alt")
+#> Alternatives: a, b, c  (base: a)
+#> 
+#> Outcome equations (alternative:term):
+#>               Estimate Std. Error z value Pr(>|z|)    
+#> b:(Intercept)   0.3127     0.2463   1.270   0.2042    
+#> b:x1           -1.4137     0.2864  -4.936 7.99e-07 ***
+#> b:x2            1.1113     0.2591   4.289 1.79e-05 ***
+#> c:(Intercept)  -0.2390     0.3037  -0.787   0.4313    
+#> c:x1            0.5080     0.2250   2.258   0.0240 *  
+#> c:x2           -0.3700     0.1919  -1.929   0.0538 .  
+#> ---
+#> Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
+#> 
+#> Generic coefficients (alternative-specific covariates):
+#>    Estimate Std. Error z value Pr(>|z|)    
+#> w1   1.1167     0.1995   5.598 2.17e-08 ***
+#> ---
+#> Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
+#> 
+#> Gumbel scale parameters (base alternative = 1; z tests are against 1; the joint test is lr_test() against the mnl() fit):
+#>         Estimate Std. Error z value Pr(>|z|)  
+#> scale:b   0.6362     0.2825  -1.288   0.1977  
+#> scale:c   1.6501     0.3822   1.701   0.0889 .
+#> ---
+#> Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
+#> 
+#> Standard errors: analytic. Log-likelihood -426.029 on 9 parameters, 600 cases. AIC 870.06, BIC 909.63.
+lr_test(mnl(chosen ~ w1 | x1 + x2, data = dh, id = "id", alt = "alt"), mh)
+#> Likelihood-ratio test
+#>   LR = 13.5651 on 2 df, p = 0.001133
+```
+
+A scale that runs to zero means that the alternative’s utility is
+estimated as deterministic relative to the others; the fit is flagged as
+a boundary fit, and the standard errors are not interpretable. The
+search holds each log scale within $`\pm 8`$. The likelihood is usually
+flat beyond that; where it still rises, the boundary warning says so,
+and the reported log-likelihood is then below the model’s supremum (the
+fit-quality flags in
+[`?mnl`](https://bagozzib.github.io/polychoice/reference/mnl.md)). The
+travel-mode data are an example of a scale running to zero: the car
+scale goes to zero, and the value that `mlogit` reports for that model
+is not its true log-likelihood but an artifact of its quadrature (the
+package’s verification ledger has the details).
+
+## Multinomial probit
+
+The multinomial probit admits any covariance of the utility errors. Only
+utility differences are identified, so the model is parameterized by the
+covariance of the differences from the base alternative with its first
+element fixed at 1 (Train 2009, section 5.2). With three alternatives
+the probabilities are exact bivariate normal integrals; with more, the
+GHK simulator with `draws` Halton draws per case is used.
+
+``` r
+
+set.seed(1)
+dp <- rmnp(1500, beta = cbind(b = c(0.3, -0.6, 0.5), c = c(-0.2, 0.4, -0.3)),
+           sigma = matrix(c(1, 0.6, 0.6, 1.5), 2), gamma = 1)
+mp <- mnprobit(chosen ~ w1 | x1 + x2, data = dp, id = "id", alt = "alt")
+summary(mp)
+#> Multinomial probit (exact bivariate normal) 
+#> Call: mnprobit(formula = chosen ~ w1 | x1 + x2, data = dp, id = "id", 
+#>     alt = "alt")
+#> Alternatives: a, b, c  (base: a)
+#> 
+#> Outcome equations (alternative:term):
+#>               Estimate Std. Error z value Pr(>|z|)    
+#> b:(Intercept)  0.28684    0.05610   5.113 3.16e-07 ***
+#> b:x1          -0.54203    0.05690  -9.525  < 2e-16 ***
+#> b:x2           0.49601    0.05271   9.411  < 2e-16 ***
+#> c:(Intercept) -0.17855    0.07288  -2.450   0.0143 *  
+#> c:x1           0.48605    0.07211   6.740 1.58e-11 ***
+#> c:x2          -0.24811    0.06216  -3.992 6.56e-05 ***
+#> ---
+#> Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
+#> 
+#> Generic coefficients (alternative-specific covariates):
+#>    Estimate Std. Error z value Pr(>|z|)    
+#> w1   0.9956     0.0607    16.4   <2e-16 ***
+#> ---
+#> Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
+#> 
+#> Covariance of the utility differences from the base (first variance fixed at 1; z tests are against the iid values, variances 1 and covariances 0.5):
+#>         Estimate Std. Error z value Pr(>|z|)   
+#> cov:c,b   0.8079     0.1065   2.891  0.00385 **
+#> var:c     1.5448     0.2549   2.138  0.03256 * 
+#> ---
+#> Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
+#> 
+#> Standard errors: analytic. Log-likelihood -856.531 on 9 parameters, 1500 cases. AIC 1731.06, BIC 1778.88.
+```
+
+The multinomial probit does not nest the multinomial logit, so the two
+are compared with
+[`vuong()`](https://bagozzib.github.io/polychoice/reference/vuong.md) or
+the information criteria; multinomial probit coefficients are on a
+smaller scale (the error-difference variance is 1 rather than
+$`\pi^2/3`$). The data were drawn with covariance 0.6 and variance 1.5.
+In this sample the variance estimate is close to its value, the
+covariance estimate about two standard errors above it, and the slopes
+within about one standard error of the values used to simulate them. In
+a recovery study of the same design (200 simulated data sets at each of
+1,500 and 3,000 cases, `verification/mnprobit_recovery_mc.R` in the
+repository) the coefficient estimates average within 0.015 of those
+values with 1,500 cases and within 0.010 with 3,000, the variance within
+0.05 and 0.012 (a finite-sample bias), and the 95 percent Wald intervals
+cover in 90 to 97 percent of the data sets. The two departures at 3,000
+cases beyond Monte Carlo error, a slope bias of 0.010 and a coverage of
+0.905, did not recur on 200 fresh seeds, and fits of 200,000 cases
+recover every value within two standard errors. Covariance parameters
+are the noisiest part of a multinomial probit fit even with an
+alternative-specific covariate, and they are fragilely identified from
+case-specific covariates alone (Keane 1992): fits may then stop at a
+near-singular covariance with a warning, and the covariance estimates
+should not be interpreted. With four or more alternatives the GHK
+simulated likelihood is not smooth near a singular covariance, so there
+the gradient and the convergence check are unreliable too, and the
+boundary warning says so
+([`?mnprobit`](https://bagozzib.github.io/polychoice/reference/mnprobit.md)).
+
+``` r
+
+vuong(mp, mnl(chosen ~ w1 | x1 + x2, data = dp, id = "id", alt = "alt"))
+#> Vuong test:  m1 = mp [ Multinomial probit (exact bivariate normal) ]
+#>              m2 = mnl(chosen ~ w1 | x1 + x2, data = dp, id = "id", alt = "alt") [ Conditional logit ]
+#> positive statistics favor m1
+#> 
+#>  correction statistic p_m1_better p_m2_better p_two_sided
+#>         raw     2.205       0.014       0.986       0.027
+#>         AIC     1.623       0.052       0.948       0.104
+#>         BIC     0.078       0.469       0.531       0.938
+```
+
+## Random alternative-specific intercepts
+
+When the cases of a unit (a respondent over several elections, a country
+over years) share unobserved tastes,
+[`remnl()`](https://bagozzib.github.io/polychoice/reference/remnl.md)
+adds a normal random intercept per unit in every non-base equation and
+integrates it out by adaptive Gauss-Hermite quadrature (the nodes are
+centred and scaled at each unit’s posterior mode and curvature, so the
+rule stays accurate for long panels where a fixed rule aliases). The
+unit is the observation of the likelihood: its contributions, the robust
+standard errors, the bootstrap, and
+[`vuong()`](https://bagozzib.github.io/polychoice/reference/vuong.md)
+are over units, while
+[`fit_stats()`](https://bagozzib.github.io/polychoice/reference/fit_stats.md)
+and the information criteria count cases.
+
+``` r
+
+set.seed(6)
+G <- 200; T <- 5; unit <- rep(seq_len(G), each = T)
+x1 <- rnorm(G * T); u <- cbind(rnorm(G, 0, 0.8), rnorm(G, 0, 1.2))
+V <- cbind(0, 0.3 + 0.8 * x1 + u[unit, 1], -0.2 - 0.6 * x1 + u[unit, 2])
+P <- exp(V) / rowSums(exp(V))
+y <- apply(P, 1, function(p) sample.int(3, 1, prob = p))
+dr <- data.frame(y = factor(c("a", "b", "c")[y]), x1, unit = factor(unit))
+mre <- remnl(y ~ x1, data = dr, unit = "unit")
+summary(mre)
+#> Multinomial logit with random alternative-specific intercepts (200 units, 12-point Gauss-Hermite per dimension) 
+#> Call: remnl(formula = y ~ x1, data = dr, unit = "unit")
+#> Alternatives: a, b, c  (base: a)
+#> 
+#> Outcome equations (alternative:term):
+#>               Estimate Std. Error z value Pr(>|z|)    
+#> b:(Intercept)  0.33107    0.09992   3.313 0.000922 ***
+#> b:x1           0.91739    0.10744   8.539  < 2e-16 ***
+#> c:(Intercept) -0.25632    0.13359  -1.919 0.055027 .  
+#> c:x1          -0.59009    0.11597  -5.088 3.62e-07 ***
+#> ---
+#> Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
+#> 
+#> Random alternative-specific intercepts: standard deviations (no z test: sd = 0 is on the boundary; use lr_test() against the mnl() fit):
+#>      Estimate Std. Error z value Pr(>|z|)
+#> sd:b   0.6918     0.1573      NA       NA
+#> sd:c   1.0529     0.1601      NA       NA
+#> 
+#> Standard errors: analytic. Log-likelihood -946.996 on 6 parameters, 1000 cases. AIC 1905.99, BIC 1935.44.
+lr_test(mnl(y ~ x1, data = dr), mre)
+#> Likelihood-ratio test
+#>   LR = 48.7747 on 2 df, p = 2.563e-11
+```
+
+The restriction $`\sigma = 0`$ is on the boundary of the parameter
+space, so the chi-square p-value of the likelihood-ratio test is
+conservative.
+
+The random intercepts are independent relative to the base alternative,
+so with three or more alternatives the base is part of the model.
+Relative to another base they would be correlated, which the diagonal
+model does not represent. A fit with another `ref` is a different model,
+with its own log-likelihood and its own test against the multinomial
+logit
+([`?remnl`](https://bagozzib.github.io/polychoice/reference/remnl.md)
+has an example). The data above were simulated with alternative `a` free
+of a random intercept, and `a` is the base.
+
+At two alternatives the model is the binomial generalized linear mixed
+model with a random intercept, and the package’s verification ledger
+records agreement with `lme4::glmer(nAGQ = 25)` across panel lengths
+from six to fifty cases per unit and standard deviations of one and two:
+within 1.2e-3 in the log-likelihood with the default 12 quadrature
+points (and 6e-5 at fifty cases per unit), and within 2e-6 with 40
+points; the package’s tests check both settings.
+
+## Fixed effects and the split-panel jackknife
+
+`fe = "unit"` adds alternative-specific constants per unit. A unit that
+never chooses an alternative has that constant at minus infinity; the
+fit treats the alternative as unavailable to the unit, which is the
+limiting likelihood, and says so; a unit that never chooses the base
+alternative has the base unavailable to it and one constant fewer, and a
+unit with a constant choice drops out. Maximum-likelihood unit constants
+carry the incidental-parameters bias in nonlinear models, of order
+$`1/T`$: with six to twelve cases per unit the slopes are inflated by
+15-30 percent. `bias_correct = "jackknife"` removes the leading term by
+the split-panel jackknife of Dhaene and Jochmans (2015): the model is
+refit on the first and second halves of every unit’s cases (rows are
+split in the order supplied, which should be temporal order) and the
+corrected slope is twice the full-sample estimate minus the mean of the
+half-panel estimates.
+
+``` r
+
+set.seed(7)
+G <- 200; T <- 12; unit <- rep(seq_len(G), each = T)
+x1 <- rnorm(G * T); x2 <- rnorm(G * T)
+a <- cbind(rnorm(G), rnorm(G))
+V <- cbind(0, 0.3 + 0.8 * x1 - 0.5 * x2 + a[unit, 1], -0.2 - 0.6 * x1 + 0.7 * x2 + a[unit, 2])
+P <- exp(V) / rowSums(exp(V))
+y <- apply(P, 1, function(p) sample.int(3, 1, prob = p))
+dfe <- data.frame(y = factor(c("a", "b", "c")[y]), x1, x2, unit = factor(unit))
+mfe <- mnl(y ~ x1 + x2, data = dfe, fe = "unit", bias_correct = "jackknife")
+rbind(ML = mfe$uncorrected$coefficients[c("b:x1", "b:x2", "c:x1", "c:x2")],
+      jackknife = coef(mfe)[c("b:x1", "b:x2", "c:x1", "c:x2")],
+      truth = c(0.8, -0.5, -0.6, 0.7))
+#>                b:x1       b:x2       c:x1      c:x2
+#> ML        0.9279685 -0.6552988 -0.7673811 0.6876658
+#> jackknife 0.7939230 -0.5883886 -0.6712075 0.6089599
+#> truth     0.8000000 -0.5000000 -0.6000000 0.7000000
+```
+
+Three of the four corrected slopes move towards the values the data were
+drawn from and one moves away, which is what one sample of a noisy
+correction looks like; the simulations described below are the evidence
+about the method. (The unit constants are nuisance parameters: the
+printed summary reports only their number, `texreg` tables leave them
+out by default (`include.fe = TRUE` shows them), and `tidy()` lists
+them.)
+
+The correction is valid only when the two halves estimate the same
+parameter (time homogeneity), so it is refused, with a warning naming
+the check, when the half-panel slopes disagree beyond the noise of
+placebo splits (random halves of every unit’s cases that ignore the time
+order) or when the full fit’s residuals trend with time within units
+(the cure for the latter is a time control in the formula: a trend,
+since period dummies are not identified within the half panels). A
+refused fit keeps `bias_correct = "none"` and the reason in
+`$jackknife_refused`, which
+[`summary()`](https://rdrr.io/r/base/summary.html) prints. The placebo
+splits have the time split’s structure, so under time homogeneity the
+two disagreements are on the same footing at every panel length, and the
+threshold, 2.5 times the placebo noise, was calibrated by simulation
+(150 units, $`J = 3`$, $`T = 6, 10, 20`$) as the smallest value on a
+grid that kept the refusal rate of time-homogeneous panels at or below 5
+percent at every $`T`$, under a rule written down before the simulations
+were run and checked on fresh seeds. Regime changes were refused in 92
+percent of the simulated panels at $`T = 6`$ and in all of them at
+$`T = 10`$ and 20, and omitted trends in all panels at $`T = 10`$ and 20
+but in only about half at $`T = 6`$, since six cases per unit carry
+little evidence of a trend. The verification ledger in the repository
+reports the refusal rates and the signed bias, root mean squared error,
+and interval coverage of both estimators. The correction removes the
+leading $`1/T`$ term only, so in very short panels it over-corrects: at
+$`T = 6`$ and 10 the corrected slopes keep part of the
+maximum-likelihood bias with the opposite sign; at $`T = 20`$ the
+maximum-likelihood slopes are still biased by several percent and the
+corrected ones by much less. At every panel length it lowers the root
+mean squared error and brings Wald intervals closer to their nominal
+coverage.
+
+[`mundlak()`](https://bagozzib.github.io/polychoice/reference/mundlak.md)
+is the correlated-random-effects alternative for short panels: it adds
+the unit means of the covariates to the formula. Fit with
+[`remnl()`](https://bagozzib.github.io/polychoice/reference/remnl.md)
+the augmented model recovers the within-unit slopes; a pooled
+[`mnl()`](https://bagozzib.github.io/polychoice/reference/mnl.md) fit of
+the same formula with `cluster = "unit"` gives population-averaged
+slopes, which are attenuated by the unit-effect variance (here by about
+a quarter), the usual behaviour of a pooled nonlinear model.
+
+``` r
+
+mk <- mundlak(y ~ x1 + x2, data = dfe, unit = "unit")
+print(mk$formula, showEnv = FALSE)
+#> y ~ x1 + x2 + x1_mean + x2_mean
+mre2 <- remnl(mk$formula, data = mk$data, unit = "unit")
+mm <- mnl(mk$formula, data = mk$data, cluster = "unit")
+rbind(remnl = coef(mre2)[c("b:x1", "b:x2", "c:x1", "c:x2")],
+      pooled = coef(mm)[c("b:x1", "b:x2", "c:x1", "c:x2")],
+      truth = c(0.8, -0.5, -0.6, 0.7))
+#>             b:x1       b:x2       c:x1      c:x2
+#> remnl  0.8221589 -0.5878710 -0.6914936 0.6146194
+#> pooled 0.6088783 -0.4414858 -0.5039616 0.4460536
+#> truth  0.8000000 -0.5000000 -0.6000000 0.7000000
+```
+
+## Choosing among the families
+
+- The multinomial logit is nested in the nested logit, the HEV, and the
+  random-intercept model: use
+  [`lr_test()`](https://bagozzib.github.io/polychoice/reference/lr_test.md)
+  (with the boundary caveat for the random intercepts).
+- The multinomial probit is not nested with any of them: use
+  [`vuong()`](https://bagozzib.github.io/polychoice/reference/vuong.md)
+  or
+  [`compare_models()`](https://bagozzib.github.io/polychoice/reference/compare_models.md).
+- [`compare_models()`](https://bagozzib.github.io/polychoice/reference/compare_models.md)
+  lines up log-likelihoods, degrees of freedom, and information criteria
+  for any set of fits to the same cases.
+
+``` r
+
+compare_models(logit = mnl(y ~ x1, data = dr), random_intercepts = mre)
+#>              model
+#>              logit
+#>  random_intercepts
+#>                                                                                                             type
+#>                                                                                                Multinomial logit
+#>  Multinomial logit with random alternative-specific intercepts (200 units, 12-point Gauss-Hermite per dimension)
+#>  inflate    n df   loglik      AIC      BIC mcfadden converged boundary
+#>          1000  4 -971.383 1950.766 1970.397    0.099      TRUE    FALSE
+#>          1000  6 -946.996 1905.991 1935.438    0.122      TRUE    FALSE
+#>  ill_conditioned n_modes
+#>            FALSE       1
+#>            FALSE       1
+```
+
+## References
+
+Bhat, C.R. (1995). A heteroscedastic extreme value model of intercity
+travel mode choice. *Transportation Research Part B*, 29, 471-483.
+
+Dhaene, G. and Jochmans, K. (2015). Split-panel jackknife estimation of
+fixed-effect models. *Review of Economic Studies*, 82, 991-1030.
+
+Keane, M.P. (1992). A note on identification in the multinomial probit
+model. *Journal of Business and Economic Statistics*, 10, 193-200.
+
+McFadden, D. (1978). Modelling the choice of residential location. In A.
+Karlqvist et al. (eds), *Spatial Interaction Theory and Planning
+Models*, 75-96. North-Holland.
+
+Train, K.E. (2009). *Discrete Choice Methods with Simulation*, 2nd ed.
+Cambridge University Press.

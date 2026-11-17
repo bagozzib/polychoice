@@ -1,0 +1,522 @@
+# Seven published analyses
+
+The package ships seven datasets taken from the replication archives of
+published studies, released by their authors under CC0 at the Harvard
+Dataverse; two of them are extracts of British Election Study surveys,
+which the UK Data Service distributes under CC BY 4.0 and their help
+pages cite. Four reproduce their published models (Liou, Liu et al.,
+Glasgow, and the penalized fits of Cook, Niehaus and Zuhlke) and one
+equals the authors’ own estimator on the same data (Baeck, Debus and
+Imre), and the package’s tests check that they do; the other two
+illustrate varying choice sets and rankings. This vignette uses each to
+show a part of the package: a clustered multinomial logit with
+interactions, an experiment with a “don’t know” answer, the IIA tests on
+the classic British election data, separation and Firth’s penalized
+likelihood, varying choice sets and rankings with ties, unlabelled
+alternatives, and a rank-ordered logit with its stability test.
+
+## Sanctions, force, and domestic unrest
+
+`sanctions` holds the country-years of Liou (2024): does a government
+facing mass protest at home turn to economic sanctions abroad, and does
+a strong legislative opposition make that more likely? The outcome has
+three alternatives, no coercion (the base), sanctions, and military
+force, and the hypothesis is an interaction of a nonviolent campaign
+with the opposition’s seat share. The published Table 1, with standard
+errors clustered by country, reproduces (its log-likelihood is
+-1161.5576).
+
+``` r
+
+data(sanctions)
+table(sanctions$outcome)
+#> 
+#>      none sanctions     force 
+#>      2400       169       416
+ms <- mnl(outcome ~ nonviolent * opposition + violent * opposition + growth + inflation +
+            leg_election + exec_election + gdppc + trade + milex + democracy + human_rights +
+            coldwar + peaceyears + I(peaceyears^2) + I(peaceyears^3),
+          data = sanctions, cluster = sanctions$ccode, se = "cluster")
+ms$loglik
+#> [1] -1161.558
+summary(ms)$coefficients[c("sanctions:nonviolent", "sanctions:opposition", "sanctions:nonviolent:opposition"), ]
+#>                                  Estimate Std. Error   z value     Pr(>|z|)
+#> sanctions:nonviolent            -1.527710   1.059604 -1.441774 0.1493661220
+#> sanctions:opposition            -3.736708   1.134080 -3.294924 0.0009844841
+#> sanctions:nonviolent:opposition  8.146855   2.926213  2.784095 0.0053677338
+```
+
+Stata’s clustered standard errors carry the small-sample factor
+$`\sqrt{G/(G-1)}`$, here $`\sqrt{137/136}`$; the package’s are smaller
+by that factor and otherwise equal. An interaction is read through
+probabilities. Averaged over the country-years, the probability of
+sanctions with and without a nonviolent campaign, at an opposition share
+of 6 and of 49 percent (the paper’s one standard deviation below and
+above the mean):
+
+``` r
+
+avg <- function(nv, opp) colMeans(predict(ms, newdata = transform(sanctions, nonviolent = nv, opposition = opp)))
+round(rbind(`no campaign, opposition 6%` = avg(0, 0.06), `campaign, opposition 6%` = avg(1, 0.06),
+            `no campaign, opposition 49%` = avg(0, 0.49), `campaign, opposition 49%` = avg(1, 0.49)), 3)
+#>                              none sanctions force
+#> no campaign, opposition 6%  0.784     0.097 0.119
+#> campaign, opposition 6%     0.823     0.051 0.126
+#> no campaign, opposition 49% 0.810     0.034 0.155
+#> campaign, opposition 49%    0.763     0.190 0.047
+```
+
+With a nonviolent campaign under way, the probability of sanctions rises
+from 0.05 to 0.19 as the opposition’s share goes from 6 to 49 percent
+(the paper reports 4.9 and 18.5 percent); without a campaign it falls.
+
+## Vaccination and “don’t know”
+
+`fluvax` is the survey experiment of Liu et al. (2024): would
+respondents take a flu vaccine developed by the United States alone,
+with China, or with Japan? The answers are no, don’t know, and yes, and
+the experiment randomizes the partner. Table 3, Model 1 reproduces with
+robust standard errors.
+
+``` r
+
+data(fluvax)
+mf <- mnl(vaccinate ~ condition + age + female + educ + income + race + party + knowledge,
+          data = fluvax, se = "robust")
+summary(mf)$coefficients[grep("condition|republican", names(coef(mf))), ]
+#>                               Estimate Std. Error    z value     Pr(>|z|)
+#> dont_know:conditionus_china -0.1209197  0.1839723 -0.6572709 5.110068e-01
+#> dont_know:conditionus_japan  0.1556454  0.1934296  0.8046619 4.210148e-01
+#> dont_know:partyrepublican   -0.6778291  0.1794010 -3.7782895 1.579093e-04
+#> yes:conditionus_china       -0.3848484  0.1709685 -2.2509899 2.438617e-02
+#> yes:conditionus_japan        0.3465168  0.1741942  1.9892559 4.667296e-02
+#> yes:partyrepublican         -1.3213227  0.1668037 -7.9214224 2.348088e-15
+first_difference(mf, "condition", from = "us_alone", to = "us_china")
+#> First differences: condition from us_alone to us_china at the covariate profile (delta intervals at 95%)
+#>  alternative  from    to   diff  lower  upper
+#>           no 0.186 0.238  0.052  0.001  0.102
+#>    dont_know 0.207 0.234  0.027 -0.028  0.083
+#>          yes 0.607 0.528 -0.079 -0.151 -0.007
+```
+
+At the covariate profile, naming China as the partner lowers the
+probability of a yes by about eight points. A “don’t know” can mix the
+undecided with respondents who give it whatever is asked. The score test
+of the multinomial logit against captive choosers, computed from the
+multinomial logit fit alone, does not reject here, and neither does its
+likelihood-ratio form (a constant captive share of “don’t know” gains
+0.41 in log-likelihood, p = 0.18). The inflated multinomial logit with
+“don’t know” as the inflated alternative improves the log-likelihood by
+4.6 for four more parameters, which the information criteria read in
+opposite directions:
+
+``` r
+
+captivity_test(mf)
+#> Score test of the multinomial logit against captive choosers (dogit; one-sided z per alternative, joint chi-square) 
+#>                test statistic df p.value
+#>         captive: no    -0.050 NA   0.520
+#>  captive: dont_know     0.631 NA   0.264
+#>        captive: yes    -0.062 NA   0.525
+#>               joint     0.575  3   0.902
+mi <- imnl(vaccinate ~ condition + age + female + educ + income + race + party + knowledge |
+             age + educ + knowledge, data = fluvax, inflate = "dont_know")
+compare_models(MNL = mf, inflated = mi)
+#>     model
+#>       MNL
+#>  inflated
+#>                                                                       type
+#>                                                          Multinomial logit
+#>  Inflated multinomial logit (inflated alternative: dont_know, logit split)
+#>    inflate    n df    loglik      AIC      BIC mcfadden converged boundary
+#>            1334 26 -1281.466 2614.931 2750.026    0.090      TRUE    FALSE
+#>  dont_know 1334 30 -1276.870 2613.740 2769.618    0.093      TRUE    FALSE
+#>  ill_conditioned n_modes
+#>            FALSE       1
+#>            FALSE       2
+```
+
+The inflated fit’s search found two distinct maxima (`mi$n_modes`, with
+a message), and the highest is reported; one more search ended where a
+split coefficient diverges, which `mi$search` lists as a boundary. The
+multinomial logit is the boundary of the inflated model, so
+`boot_lr_test(mf, mi)` gives the calibrated comparison (not run here:
+every replicate refits the inflated model).
+
+## Issue distances in Britain, 1987
+
+`bes1987` holds the 1987 British General Election Study respondents of
+Glasgow (2001), with the distance between each voter and each party on
+seven issues: the classic example of the debate about the independence
+of irrelevant alternatives in multiparty elections. The multinomial
+logit of the paper’s Appendix A reproduces (log-likelihood -1477.56).
+
+``` r
+
+data(bes1987)
+fb <- chosen ~ defense + phillips + taxation + nationalization + redistribution + crime + welfare |
+  south + midlands + north + wales + scotland + union + public + working_class + female + age +
+  homeowner + income + education + inflation + taxes + unemployment
+mb <- mnl(fb, data = bes1987, id = "id", alt = "party", ref = "alliance")
+mb$loglik
+#> [1] -1477.557
+iia_tests(mb, seed = 1)
+#> Tests of IIA / misspecification of the multinomial logit 
+#>                                            test  alternative statistic df
+#>                   Hausman-McFadden (difference) conservative    59.860 24
+#>                   Hausman-McFadden (difference)       labour   -42.232 24
+#>                   Hausman-McFadden (difference)     alliance   108.317 24
+#>                        Hausman-McFadden (joint) conservative    25.395 24
+#>                        Hausman-McFadden (joint)       labour    30.454 24
+#>                        Hausman-McFadden (joint)     alliance    34.068 24
+#>                Small-Hsiao (median over splits) conservative    21.212 24
+#>                Small-Hsiao (median over splits)       labour    25.852 24
+#>                Small-Hsiao (median over splits)     alliance    29.999 24
+#>                 Fok-Paap CL Hausman (Q1, joint)                 67.563 41
+#>  Fok-Paap GMM overidentification (Q2, two-step)                 44.544 31
+#>   p.value   psd share_separated
+#>  6.68e-05  TRUE              NA
+#>   1.00000 FALSE              NA
+#>  1.11e-12  TRUE              NA
+#>   0.38455  TRUE              NA
+#>   0.17015  TRUE              NA
+#>   0.08347  TRUE              NA
+#>   0.62620    NA               0
+#>   0.36072    NA               0
+#>   0.18479    NA               0
+#>   0.00559  TRUE              NA
+#>   0.05470    NA              NA
+#> psd = FALSE: the covariance difference was not positive semi-definite for that row. A negative statistic is no evidence against the model (p-value 1); a positive one from a variance-difference form is unreliable (see the test's help).
+#> Small-Hsiao (median over splits): descriptive, not a test at its level (it rejected in none of 300 samples in the package's size study); for the test, run one split with its seed fixed in advance (small_hsiao(m, seed = ), or iia_tests(m, splits = 1, seed = )).
+```
+
+The tests disagree, as they often do. The Hausman-McFadden test in its
+usual variance-difference form rejects for two alternatives. That form
+over-rejects, and its joint form does not confirm them: nothing in the
+joint form rejects at 0.05 (the Small-Hsiao medians are descriptive).
+(The difference form’s covariance difference is not positive
+semi-definite in a third row, which does not reject.) The
+composite-likelihood Hausman test of Fok and Paap rejects. The vignette
+*Testing IIA and specification* explains which forms to trust. A nested
+logit that puts Labour and the Alliance in one nest is a direct
+alternative:
+
+``` r
+
+mn <- nlogit(fb, data = bes1987, id = "id", alt = "party", ref = "alliance",
+             nests = list(left = c("labour", "alliance"), right = "conservative"))
+coef(mn)["lambda:left"]
+#> lambda:left 
+#>   0.8135637
+lr_test(mb, mn)
+#> Likelihood-ratio test
+#>   LR = 4.4639 on 1 df, p = 0.03462
+```
+
+Its inclusive-value parameter, 0.81, lies inside the unit interval that
+random-utility maximization requires (the other two nestings of the
+three parties give values above 1), and the likelihood-ratio test
+prefers it to the multinomial logit at the 0.05 level: Labour and
+Alliance voters treat the two parties as closer substitutes than the
+multinomial logit allows.
+
+## Who leaves an insurgency: separation
+
+`defection` holds the ex-combatants of Colombian guerrilla groups
+analysed by Oppenheim et al. (2015): were they captured, did they
+demobilize on their own, or did they switch to the paramilitaries?
+Oppenheim et al. interact the reasons for joining with what the group
+did, but the rare outcomes crossed with rare binary covariates leave
+empty cells: no captured combatant joined for economic reasons without
+being indoctrinated. Cook, Niehaus and Zuhlke (2018) show that the
+maximum-likelihood estimates of such interactions do not exist (a
+combination of the covariates predicts some outcomes perfectly:
+separation), and re-estimate the models with Firth’s penalized
+likelihood. Their penalized estimates of Models 3 to 5 reproduce.
+
+``` r
+
+data(defection)
+with(defection, table(outcome, economic, indoctrination))
+#> , , indoctrination = 0
+#> 
+#>              economic
+#> outcome         0   1
+#>   captured      4   0
+#>   demobilized  35  13
+#>   switched      7   2
+#> 
+#> , , indoctrination = 1
+#> 
+#>              economic
+#> outcome         0   1
+#>   captured     40   5
+#>   demobilized 383  75
+#>   switched     11   7
+f3 <- outcome ~ economic * indoctrination + age_joined + birth_year + school_age + male
+md <- suppressWarnings(mnl(f3, data = defection, ref = "captured"))
+mf <- mnl(f3, data = defection, ref = "captured", firth = TRUE)
+keep <- c("demobilized:economic", "demobilized:economic:indoctrination")
+round(cbind(ML = coef(md)[keep], Firth = coef(mf)[keep]), 3)
+#>                                           ML  Firth
+#> demobilized:economic                 152.673  0.903
+#> demobilized:economic:indoctrination -152.328 -0.632
+separation(mf)
+#> Quasi-complete separation: 15 of the 1164 comparisons the data report are separated, in 15 case(s);
+#> the maximum-likelihood estimates do not exist.
+#> Coefficients moving along some separating direction (the reported direction's coordinates):
+#>                demobilized:economic demobilized:economic:indoctrination 
+#>                                 0.5                                -0.5 
+#>                   switched:economic    switched:economic:indoctrination 
+#>                                 0.5                                -0.5
+```
+
+The maximum-likelihood fit warns that the data are separated (the
+warning is suppressed above), and its estimates are wherever the
+optimizer stopped. The penalized estimates are finite (Cook et al.,
+Table 3: 0.903 and -0.632).
+[`separation()`](https://bagozzib.github.io/polychoice/reference/separation.md)
+decides separation exactly, by a linear program on the comparisons the
+choices report, and names the coefficients along the separating
+direction: the economic-without-indoctrination contrast in both
+equations, since the empty cell is that of the base outcome, so raising
+both other outcomes there fits every one of its cases better. Under
+separation the Wald standard errors of those coefficients mean little;
+the profile penalized-likelihood intervals, the default of
+[`confint()`](https://rdrr.io/r/stats/confint.html) for a penalized fit,
+and the penalized likelihood-ratio tests are the inference to use:
+
+``` r
+
+confint(mf, keep)
+#>                                         2.5 %   97.5 %
+#> demobilized:economic                -1.488544 5.828496
+#> demobilized:economic:indoctrination -5.609336 1.969565
+term_test(mf, type = "lr")
+#> Joint tests of each term across equations (penalized likelihood ratio, Firth) 
+#>                     term statistic df  p.value
+#>                 economic     0.460  2 0.794707
+#>           indoctrination    13.943  2 0.000938
+#>               age_joined     6.162  2 0.045902
+#>               birth_year     9.062  2 0.010769
+#>               school_age     2.718  2 0.256971
+#>                     male     6.204  2 0.044958
+#>  economic:indoctrination     2.367  2 0.306274
+```
+
+The interaction that carried the published conditional hypothesis is far
+from significant once the penalty keeps it finite, as Cook et
+al. conclude. The penalty is invariant to the choice of base
+alternative, and it shrinks the fitted probabilities towards equal
+shares, so they no longer average to the observed shares.
+[`rologit()`](https://bagozzib.github.io/polychoice/reference/rologit.md)
+takes `firth = TRUE` too, with tied rankings.
+
+## Distance to the candidate, England 2010
+
+`bes2010` holds the respondents of the 2010 British Election Study in
+English constituencies, with the driving distance from each voter’s home
+to each party’s candidate (Arzheimer and Evans 2012). A party whose
+candidate’s distance is unknown is left out of the respondent’s choice
+set, so the choice sets vary: 234 respondents choose between two
+parties.
+
+``` r
+
+data(bes2010)
+table(table(bes2010$id))
+#> 
+#>   2   3 
+#> 234 440
+mc <- mnl(chosen ~ feeling + incumbent + distance + deprivation | 1, data = bes2010, id = "id",
+          alt = "party", ref = "labour", cluster = "constituency", se = "cluster")
+summary(mc)
+#> Conditional logit 
+#> Call: mnl(formula = chosen ~ feeling + incumbent + distance + deprivation | 
+#>     1, data = bes2010, id = "id", alt = "party", ref = "labour", 
+#>     se = "cluster", cluster = "constituency")
+#> Alternatives: labour, conservative, libdem  (base: labour)
+#> 
+#> Outcome equations (alternative:term):
+#>                          Estimate Std. Error z value Pr(>|z|)  
+#> conservative:(Intercept)  0.33298    0.14278   2.332   0.0197 *
+#> libdem:(Intercept)        0.05992    0.18450   0.325   0.7454  
+#> ---
+#> Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
+#> 
+#> Generic coefficients (alternative-specific covariates):
+#>               Estimate Std. Error z value Pr(>|z|)    
+#> feeling      0.8172822  0.0609151  13.417  < 2e-16 ***
+#> incumbent    0.6457370  0.1566508   4.122 3.75e-05 ***
+#> distance    -0.0060600  0.0024868  -2.437   0.0148 *  
+#> deprivation  0.0003232  0.0115231   0.028   0.9776    
+#> ---
+#> Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
+#> 
+#> Standard errors: cluster. Log-likelihood -328.472 on 6 parameters, 674 cases. AIC 668.94, BIC 696.02.
+```
+
+The same voters rated the parties after the election. Read as rankings,
+with equal ratings as ties, the ratings give a rank-ordered logit (the
+exact tie likelihood of Allison and Christakis 1994). A party the
+respondent did not rate is read as not on offer (its row is dropped),
+not as ranked below the rated parties:
+
+``` r
+
+r <- bes2010[!is.na(bes2010$rating), ]
+r$rank <- stats::ave(-r$rating, r$id, FUN = function(v) match(v, sort(unique(v))))
+keep <- stats::ave(r$rank, r$id, FUN = function(v) length(v) >= 2 & length(unique(v)) >= 2) == 1
+mr <- rologit(rank ~ incumbent + distance + deprivation | 1, data = r[keep, ], id = "id",
+              alt = "party", ref = "labour", cluster = "constituency", se = "cluster")
+summary(mr)$coefficients
+#>                               Estimate   Std. Error    z value     Pr(>|z|)
+#> conservative:(Intercept)  0.5783995366 0.1184718597  4.8821681 1.049257e-06
+#> libdem:(Intercept)        0.6097570718 0.0909177878  6.7066862 1.990938e-11
+#> incumbent                 0.4494020525 0.1180507988  3.8068531 1.407463e-04
+#> distance                 -0.0001369413 0.0007427007 -0.1843829 8.537131e-01
+#> deprivation              -0.0079397433 0.0053962438 -1.4713463 1.411975e-01
+```
+
+Distance matters for the vote but not for the ratings.
+
+## Government formation in the German states
+
+`cabinets` holds every potential cabinet at 125 government formations
+after German state elections (Baeck, Debus and Imre 2026): the authors’
+potential cabinets of the parties in parliament, from 3 to 63 per
+formation. The alternatives are unlabelled (a cabinet at one formation
+is not the same alternative as at another), so the conditional logit has
+generic coefficients only and no alternative-specific constants (`0 +`);
+most potential cabinets never form, which such a model allows. The fit
+agrees with
+[`survival::clogit()`](https://rdrr.io/pkg/survival/man/clogit.html) on
+the same rows (the package’s test checks the log-likelihood to four
+decimals).
+
+``` r
+
+data(cabinets)
+table(table(cabinets$election))
+#> 
+#>  3  7  8 15 31 63 
+#>  1 21  1 38 44 20
+mk <- mnl(chosen ~ 0 + incumbent + incumbent_newpm + minority + min_winning + bargaining +
+            strongest + cross_cutting + het_economic + het_social + pea_res + rej_res | 1,
+          data = cabinets, id = "election", alt = "cabinet")
+summary(mk)
+#> Conditional logit 
+#> Call: mnl(formula = chosen ~ 0 + incumbent + incumbent_newpm + minority + 
+#>     min_winning + bargaining + strongest + cross_cutting + het_economic + 
+#>     het_social + pea_res + rej_res | 1, data = cabinets, id = "election", 
+#>     alt = "cabinet")
+#> Alternatives: afb, afd, cdu, cdu+afb, cdu+afd, cdu+dvu, cdu+dvu+ssw, cdu+fdp, ... (296 alternatives)  (base: afb)
+#> 
+#> Generic coefficients (alternative-specific covariates):
+#>                 Estimate Std. Error z value Pr(>|z|)    
+#> incumbent         3.7724     0.6666   5.660 1.52e-08 ***
+#> incumbent_newpm   2.5570     0.8423   3.036 0.002399 ** 
+#> minority         -0.3939     0.9740  -0.404 0.685865    
+#> min_winning       3.9542     0.8111   4.875 1.09e-06 ***
+#> bargaining        2.0078     0.7941   2.528 0.011463 *  
+#> strongest         2.1467     0.6396   3.356 0.000790 ***
+#> cross_cutting    -0.7981     0.3386  -2.357 0.018416 *  
+#> het_economic     -0.7999     0.1739  -4.599 4.25e-06 ***
+#> het_social       -0.5306     0.1795  -2.955 0.003125 ** 
+#> pea_res           3.8530     0.7348   5.244 1.57e-07 ***
+#> rej_res          -6.4980     1.6873  -3.851 0.000118 ***
+#> ---
+#> Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
+#> 
+#> Standard errors: analytic. Log-likelihood -81.004 on 11 parameters, 125 cases. AIC 184.01, BIC 215.12.
+```
+
+`pea_res` and `rej_res` are the first-stage residuals of the authors’
+two-stage residual inclusion (pre-electoral alliances and rejections),
+so their standard errors, like the published ones, ignore the first
+stage.
+
+## Leader attributes in Afghanistan
+
+`afghan_leaders` holds the rankings of six attributes of political
+leaders by respondents of a survey experiment in three northern Afghan
+provinces (Bhatia and Monroe 2024), after one of four randomly assigned
+vignettes. Honesty and education lead, the mujahideen past trails, and
+the vignettes move the mean ranks little:
+
+``` r
+
+data(afghan_leaders)
+round(tapply(afghan_leaders$rank, afghan_leaders[c("attribute", "treatment")], mean), 2)
+#>             treatment
+#> attribute    control bribery nepotism insecurity
+#>   religious     3.06    3.24     3.14       3.11
+#>   educated      2.26    2.14     2.23       2.22
+#>   mujahideen    4.80    4.95     4.89       4.82
+#>   government    4.15    4.10     4.06       4.15
+#>   military      4.51    4.43     4.54       4.53
+#>   honest        2.22    2.14     2.14       2.17
+ma <- rologit(rank ~ 1 | treatment + female + age, data = afghan_leaders, id = "id",
+              alt = "attribute", ref = "educated")
+ma1 <- rologit(rank ~ 1 | treatment + female + age, data = afghan_leaders, id = "id",
+               alt = "attribute", ref = "educated", depth = 1)
+round(cbind(rankings = coef(ma), first_choices = coef(ma1))[grep("insecurity", names(coef(ma))), ], 3)
+#>                                rankings first_choices
+#> religious:treatmentinsecurity    -0.029        -0.248
+#> mujahideen:treatmentinsecurity   -0.034        -0.052
+#> government:treatmentinsecurity   -0.073         0.354
+#> military:treatmentinsecurity     -0.064        -0.566
+#> honest:treatmentinsecurity        0.013         0.116
+rank_test(ma, after = 1)
+#> Stability of preferences across ranking stages (position 1 against later; 2479 ranking(s) with later stages) 
+#>              test statistic df p.value
+#>  Likelihood ratio   401.151 30  <2e-16
+#>              Wald   291.255 30  <2e-16
+```
+
+The rank-ordered logit uses the whole ranking, `depth = 1` only the
+first choices. Their estimates differ, and
+[`rank_test()`](https://bagozzib.github.io/polychoice/reference/rank_test.md)
+rejects equal coefficients for the first position and the later ones
+decisively: the respondents’ first choices follow other preferences than
+the rest of their rankings (or the respondents differ in ways the model
+does not capture; Allison and Christakis 1994). Then the pooled rankings
+are to be read with care, and the first choices alone are the
+conservative analysis.
+
+## References
+
+Allison, P.D. and Christakis, N.A. (1994). Logit models for sets of
+ranked items. *Sociological Methodology*, 24, 199-228.
+
+Arzheimer, K. and Evans, J. (2012). Geolocation and voting:
+Candidate-voter distance effects on party choice in the 2010 UK general
+election in England. *Political Geography*, 31, 301-310.
+
+Baeck, H., Debus, M. and Imre, M. (2026). Incumbency advantages, prime
+minister replacements and government formation. *Party Politics*, 32(2),
+183-196.
+
+Bhatia, J. and Monroe, S.L. (2024). Insecurity and support for female
+leadership in conflict states: Evidence from Afghanistan. *British
+Journal of Political Science*, 54, 771-792.
+
+Cook, S.J., Niehaus, J. and Zuhlke, S. (2018). A warning on separation
+in multinomial logistic models. *Research & Politics*, 5(2).
+<doi:10.1177/2053168018769510>.
+
+Glasgow, G. (2001). Mixed logit models for multiparty elections.
+*Political Analysis*, 9, 116-136.
+
+Liou, R.Y.-L. (2024). Mass mobilization, elite competition, and
+diversionary use of sanctions. *Foreign Policy Analysis*, 20(4),
+orae025.
+
+Liu, R., Nagao, H., Hatungimana, W., Zhang, J.J. and Kennedy, J.J.
+(2024). The politics of flu vaccines: International collaboration and
+political partisanship. *Japanese Journal of Political Science*, 25,
+61-74.
+
+Oppenheim, B., Steele, A., Vargas, J.F. and Weintraub, M. (2015). True
+believers, deserters, and traitors: Who leaves insurgent groups and why.
+*Journal of Conflict Resolution*, 59(5), 794-823.
